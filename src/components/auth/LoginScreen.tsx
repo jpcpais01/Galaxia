@@ -46,13 +46,14 @@ function StarField() {
 }
 
 export default function LoginScreen() {
-  const { enter: claimUsername, loading, error, clearError } = useAuthStore();
+  const { enter, loading, error, clearError } = useAuthStore();
   const [username, setUsername] = useState('');
+  const [pin, setPin]           = useState('');
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     clearError();
-    await claimUsername(username);
+    await enter(username, pin);
   };
 
   return (
@@ -73,7 +74,7 @@ export default function LoginScreen() {
 
         {/* Form */}
         <form onSubmit={handleSubmit} className="w-full pixel-panel-glow p-6 flex flex-col gap-5">
-          <div className="panel-header text-center">CHOOSE YOUR NAME</div>
+          <div className="panel-header text-center">IDENTIFY YOURSELF</div>
 
           <div className="flex flex-col gap-2">
             <input
@@ -98,6 +99,28 @@ export default function LoginScreen() {
             </p>
           </div>
 
+          <div className="flex flex-col gap-2">
+            <input
+              type="password"
+              value={pin}
+              onChange={e => { setPin(e.target.value); clearError(); }}
+              placeholder="access code..."
+              maxLength={32}
+              autoComplete="off"
+              spellCheck={false}
+              className="
+                bg-[#050510] border border-[#1a2a3a] text-[#c0d0e0]
+                font-mono text-base px-4 py-3 text-center tracking-widest
+                focus:outline-none focus:border-accent-cyan focus:shadow-glow-cyan
+                placeholder-[#1a2a3a] transition-all
+              "
+              required
+            />
+            <p className="font-mono text-[9px] text-[#1a3a4a] text-center">
+              new commander: this becomes your PIN · min 4 chars
+            </p>
+          </div>
+
           {error && (
             <div className="font-mono text-[11px] text-[#ff4455] bg-[#ff445511] border border-[#ff445533] px-3 py-2 text-center fade-in">
               ⚠ {error}
@@ -106,7 +129,7 @@ export default function LoginScreen() {
 
           <button
             type="submit"
-            disabled={loading || username.trim().length < 3}
+            disabled={loading || username.trim().length < 3 || pin.length < 4}
             className="btn-cyan w-full py-3 disabled:opacity-40 disabled:cursor-not-allowed text-[11px]"
           >
             {loading ? '[ CONNECTING... ]' : '[ ENTER GALAXY ]'}
@@ -114,7 +137,7 @@ export default function LoginScreen() {
         </form>
 
         <p className="font-mono text-[9px] text-[#1a2a3a] text-center leading-relaxed">
-          Pick a unique name to begin your conquest.
+          New name = new account · Same name + PIN = your account
         </p>
       </div>
     </div>

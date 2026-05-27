@@ -5,6 +5,12 @@ import type { Player } from '@/types/game';
 
 const LS_KEY = 'galaxia_uid';
 
+async function hashPin(pin: string): Promise<string> {
+  const data = new TextEncoder().encode(pin);
+  const buf  = await crypto.subtle.digest('SHA-256', data);
+  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
 function randomUid(): string {
   return typeof crypto !== 'undefined' && crypto.randomUUID
     ? crypto.randomUUID()
@@ -21,7 +27,7 @@ interface AuthState {
   error: string | null;
   initialized: boolean;
   init: () => Promise<void>;
-  enter: (username: string) => Promise<void>;
+  enter: (username: string, pin: string) => Promise<void>;
   signOut: () => void;
   clearError: () => void;
 }
@@ -52,28 +58,34 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     }
   },
 
-  enter: async (username) => {
+  enter: async (username, pin) => {
     set({ loading: true, error: null });
 
     const trimmed = username.trim();
     if (trimmed.length < 3)                 { set({ loading: false, error: 'At least 3 characters' }); return; }
     if (trimmed.length > 20)                { set({ loading: false, error: '20 characters max' }); return; }
     if (!/^[a-zA-Z0-9_-]+$/.test(trimmed)) { set({ loading: false, error: 'Letters, numbers, - and _ only' }); return; }
+    if (pin.length < 4)                     { set({ loading: false, error: 'PIN must be at least 4 characters' }); return; }
 
-    const key = trimmed.toLowerCase();
+    const key    = trimmed.toLowerCase();
+    const pinHash = await hashPin(pin);
 
     try {
       const usernameSnap = await getDoc(doc(db, 'usernames', key));
 
       if (usernameSnap.exists()) {
-        // Username taken — log straight in as that player
-        const { uid } = usernameSnap.data() as { uid: string };
+        // Username exists — verify PIN
+        const { uid, pinHash: storedHash } = usernameSnap.data() as { uid: string; pinHash: string };
+        if (pinHash !== storedHash) {
+          set({ loading: false, error: 'Wrong PIN' });
+          return;
+        }
         const playerSnap = await getDoc(doc(db, 'users', uid));
         const player = playerSnap.data() as Player;
         localStorage.setItem(LS_KEY, uid);
         set({ user: { uid }, player, loading: false });
       } else {
-        // New username — claim it
+        // New username — claim it with PIN
         const uid = randomUid();
         const player: Player = {
           id: uid,
@@ -87,7 +99,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
           const check = await tx.get(doc(db, 'usernames', key));
           if (check.exists()) throw new Error('Username just taken — try another');
           tx.set(doc(db, 'users', uid), player);
-          tx.set(doc(db, 'usernames', key), { uid, username: trimmed });
+          tx.set(doc(db, 'usernames', key), { uid, username: trimmed, pinHash });
         });
 
         localStorage.setItem(LS_KEY, uid);
