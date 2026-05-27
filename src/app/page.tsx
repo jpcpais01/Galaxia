@@ -1,0 +1,34 @@
+'use client';
+export const dynamic = 'force-dynamic';
+import { useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import { useAuthStore } from '@/store/auth-store';
+import LoginScreen from '@/components/auth/LoginScreen';
+
+export default function HomePage() {
+  const { user, initialized, init } = useAuthStore();
+  const router = useRouter();
+
+  useEffect(() => {
+    const unsub = init();
+    return unsub;
+  }, []);
+
+  useEffect(() => {
+    if (initialized && user) {
+      router.replace('/lobby');
+    }
+  }, [initialized, user]);
+
+  if (!initialized) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-space-900">
+        <div className="font-pixel text-accent-cyan text-sm glow-text-cyan animate-pulse">
+          INITIALIZING...
+        </div>
+      </div>
+    );
+  }
+
+  return <LoginScreen />;
+}

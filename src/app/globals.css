@@ -1,0 +1,144 @@
+@import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Share+Tech+Mono&display=swap');
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --space-bg: #00000f;
+  --panel-bg: #080814;
+  --panel-border: #1a1a3a;
+  --accent: #00ffff;
+  --text: #c0d0e0;
+  --text-dim: #5a6a7a;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html, body {
+  height: 100%;
+  overflow: hidden;
+  background: var(--space-bg);
+  color: var(--text);
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 13px;
+}
+
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: #050510; }
+::-webkit-scrollbar-thumb { background: #1a1a3a; border-radius: 2px; }
+::-webkit-scrollbar-thumb:hover { background: #2a2a5a; }
+
+@layer components {
+  .pixel-panel {
+    @apply bg-[#080814] border border-[#1a1a3a];
+    box-shadow: inset 0 0 0 1px #0f0f28, 0 0 20px #00001088;
+    image-rendering: pixelated;
+  }
+
+  .pixel-panel-glow {
+    @apply pixel-panel;
+    box-shadow: inset 0 0 0 1px #0f0f28, 0 0 20px #00001088, 0 0 1px 1px #00ffff22;
+  }
+
+  .btn-pixel {
+    @apply font-pixel text-[10px] px-3 py-2 border border-current cursor-pointer select-none;
+    transition: all 0.1s;
+    image-rendering: pixelated;
+  }
+
+  .btn-pixel:hover {
+    filter: brightness(1.4);
+    transform: translateY(-1px);
+    box-shadow: 0 2px 8px currentColor44;
+  }
+
+  .btn-pixel:active {
+    transform: translateY(1px);
+    filter: brightness(0.8);
+  }
+
+  .btn-cyan { @apply btn-pixel text-accent-cyan border-accent-cyan bg-[#00ffff11]; }
+  .btn-gold { @apply btn-pixel text-accent-gold border-accent-gold bg-[#ffd70011]; }
+  .btn-red  { @apply btn-pixel text-[#ff4455] border-[#ff4455] bg-[#ff445511]; }
+  .btn-green{ @apply btn-pixel text-accent-green border-accent-green bg-[#00ff8811]; }
+  .btn-gray { @apply btn-pixel text-[#5a6a7a] border-[#2a3a4a] bg-[#0a1020]; }
+
+  .resource-chip {
+    @apply flex items-center gap-1 px-2 py-1 rounded font-mono text-xs;
+    background: #0a0a1a;
+    border: 1px solid #1a1a3a;
+  }
+
+  .panel-header {
+    @apply font-pixel text-[10px] text-accent-cyan px-3 py-2 border-b border-[#1a1a3a] uppercase tracking-widest;
+    text-shadow: 0 0 8px #00ffff88;
+  }
+
+  .scrollable {
+    @apply overflow-y-auto overflow-x-hidden;
+    scrollbar-width: thin;
+    scrollbar-color: #1a1a3a transparent;
+  }
+
+  .glow-text-cyan { text-shadow: 0 0 8px #00ffff, 0 0 16px #00ffff44; }
+  .glow-text-gold { text-shadow: 0 0 8px #ffd700, 0 0 16px #ffd70044; }
+  .glow-text-red  { text-shadow: 0 0 8px #ff4455, 0 0 16px #ff445544; }
+
+  .scanlines {
+    position: relative;
+  }
+  .scanlines::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: repeating-linear-gradient(
+      to bottom,
+      transparent,
+      transparent 2px,
+      rgba(0,0,0,0.08) 2px,
+      rgba(0,0,0,0.08) 4px
+    );
+    pointer-events: none;
+    z-index: 10;
+  }
+
+  canvas {
+    image-rendering: pixelated;
+    image-rendering: crisp-edges;
+  }
+
+  .pixel-border {
+    border: 2px solid #1a1a3a;
+    box-shadow:
+      inset 2px 2px 0 #0a0a1a,
+      inset -2px -2px 0 #2a2a4a,
+      2px 2px 0 #000008;
+  }
+}
+
+@keyframes flicker {
+  0%, 100% { opacity: 1; }
+  92% { opacity: 1; }
+  93% { opacity: 0.8; }
+  94% { opacity: 1; }
+  96% { opacity: 0.9; }
+  97% { opacity: 1; }
+}
+
+.flicker { animation: flicker 8s ease-in-out infinite; }
+
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+.blink { animation: blink 1s step-end infinite; }
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.fade-in { animation: fadeIn 0.2s ease-out; }

@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="192" height="192" viewBox="0 0 192 192">
+  <rect width="192" height="192" fill="#00000f"/>
+  <circle cx="96" cy="96" r="72.96000000000001" fill="none" stroke="#00ffff" stroke-width="2.88" opacity="0.3"/>
+  <circle cx="96" cy="96" r="42.24" fill="none" stroke="#00ffff" stroke-width="1.92" opacity="0.2"/>
+  <circle cx="96" cy="96" r="15.36" fill="#ffe066"/>
+  <circle cx="96" cy="96" r="23.04" fill="#ff8800" opacity="0.4"/>
+  <circle cx="96" cy="96" r="34.56" fill="#ff440044"/>
+  <!-- Stars -->
+  <rect x="38.400000000000006" y="34.56" width="2.3040000000000003" height="2.3040000000000003" fill="#ffffff" opacity="0.9"/>
+  <rect x="144" y="42.24" width="2.3040000000000003" height="2.3040000000000003" fill="#ffffff" opacity="0.7"/>
+  <rect x="28.799999999999997" y="124.80000000000001" width="1.536" height="1.536" fill="#ffffff" opacity="0.8"/>
+  <rect x="153.60000000000002" y="134.39999999999998" width="1.92" height="1.92" fill="#ffffff" opacity="0.6"/>
+  <rect x="105.60000000000001" y="23.04" width="1.536" height="1.536" fill="#8888ff" opacity="0.9"/>
+  <rect x="168.96" y="80.64" width="1.536" height="1.536" fill="#ff8844" opacity="0.8"/>
+  <!-- Spiral arm hints -->
+  <path d="M 96 96 Q 134.39999999999998 57.599999999999994 163.2 96" stroke="#00ffff" stroke-width="0.96" fill="none" opacity="0.2"/>
+  <path d="M 96 96 Q 57.599999999999994 134.39999999999998 28.799999999999997 96" stroke="#00ffff" stroke-width="0.96" fill="none" opacity="0.2"/>
+</svg>

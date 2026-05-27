@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <rect width="512" height="512" fill="#00000f"/>
+  <circle cx="256" cy="256" r="194.56" fill="none" stroke="#00ffff" stroke-width="7.68" opacity="0.3"/>
+  <circle cx="256" cy="256" r="112.64" fill="none" stroke="#00ffff" stroke-width="5.12" opacity="0.2"/>
+  <circle cx="256" cy="256" r="40.96" fill="#ffe066"/>
+  <circle cx="256" cy="256" r="61.44" fill="#ff8800" opacity="0.4"/>
+  <circle cx="256" cy="256" r="92.16" fill="#ff440044"/>
+  <!-- Stars -->
+  <rect x="102.4" y="92.16" width="6.144" height="6.144" fill="#ffffff" opacity="0.9"/>
+  <rect x="384" y="112.64" width="6.144" height="6.144" fill="#ffffff" opacity="0.7"/>
+  <rect x="76.8" y="332.8" width="4.096" height="4.096" fill="#ffffff" opacity="0.8"/>
+  <rect x="409.6" y="358.4" width="5.12" height="5.12" fill="#ffffff" opacity="0.6"/>
+  <rect x="281.6" y="61.44" width="4.096" height="4.096" fill="#8888ff" opacity="0.9"/>
+  <rect x="450.56" y="215.04" width="4.096" height="4.096" fill="#ff8844" opacity="0.8"/>
+  <!-- Spiral arm hints -->
+  <path d="M 256 256 Q 358.4 153.6 435.2 256" stroke="#00ffff" stroke-width="2.56" fill="none" opacity="0.2"/>
+  <path d="M 256 256 Q 153.6 358.4 76.8 256" stroke="#00ffff" stroke-width="2.56" fill="none" opacity="0.2"/>
+</svg>
