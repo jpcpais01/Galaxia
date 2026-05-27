@@ -1,24 +1,28 @@
 import { create } from 'zustand';
-import {
-  signInAnonymously,
-  signOut as firebaseSignOut,
-  onAuthStateChanged,
-  type User,
-} from 'firebase/auth';
-import { doc, setDoc, getDoc, collection, query, where, getDocs, runTransaction } from 'firebase/firestore';
-import { auth, db } from '@/lib/firebase';
+import { doc, getDoc, setDoc, runTransaction } from 'firebase/firestore';
+import { db } from '@/lib/firebase';
 import type { Player } from '@/types/game';
 
+const LS_KEY = 'galaxia_uid';
+
+function randomUid(): string {
+  return typeof crypto !== 'undefined' && crypto.randomUUID
+    ? crypto.randomUUID()
+    : Math.random().toString(36).slice(2) + Date.now().toString(36);
+}
+
+// Minimal shape so the rest of the app can still do user?.uid
+interface SimpleUser { uid: string }
+
 interface AuthState {
-  user: User | null;
+  user: SimpleUser | null;
   player: Player | null;
   loading: boolean;
   error: string | null;
   initialized: boolean;
-  needsUsername: boolean;        // anonymous session exists but no username claimed yet
-  claimUsername: (username: string) => Promise<void>;
-  signOut: () => Promise<void>;
-  init: () => () => void;
+  init: () => Promise<void>;
+  enter: (username: string) => Promise<void>;
+  signOut: () => void;
   clearError: () => void;
 }
 
@@ -28,74 +32,75 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   loading: false,
   error: null,
   initialized: false,
-  needsUsername: false,
 
-  init: () => {
-    const unsub = onAuthStateChanged(auth, async (user) => {
-      if (user) {
-        const snap = await getDoc(doc(db, 'users', user.uid));
-        if (snap.exists()) {
-          set({ user, player: snap.data() as Player, initialized: true, needsUsername: false });
-        } else {
-          // Anonymous session exists but username not claimed yet
-          set({ user, player: null, initialized: true, needsUsername: true });
-        }
+  init: async () => {
+    if (typeof window === 'undefined') { set({ initialized: true }); return; }
+
+    const uid = localStorage.getItem(LS_KEY);
+    if (!uid) { set({ initialized: true }); return; }
+
+    try {
+      const snap = await getDoc(doc(db, 'users', uid));
+      if (snap.exists()) {
+        set({ user: { uid }, player: snap.data() as Player, initialized: true });
       } else {
-        // No session at all — sign in anonymously so we have a UID ready
-        try {
-          await signInAnonymously(auth);
-          // onAuthStateChanged will fire again with the new anonymous user
-        } catch {
-          set({ user: null, player: null, initialized: true, needsUsername: true });
-        }
+        localStorage.removeItem(LS_KEY);
+        set({ initialized: true });
       }
-    });
-    return unsub;
+    } catch {
+      set({ initialized: true });
+    }
   },
 
-  claimUsername: async (username) => {
-    const { user } = get();
-    if (!user) return;
-
+  enter: async (username) => {
     set({ loading: true, error: null });
 
     const trimmed = username.trim();
-    if (trimmed.length < 3)                     { set({ loading: false, error: 'At least 3 characters' }); return; }
-    if (trimmed.length > 20)                    { set({ loading: false, error: '20 characters max' }); return; }
-    if (!/^[a-zA-Z0-9_-]+$/.test(trimmed))     { set({ loading: false, error: 'Letters, numbers, - and _ only' }); return; }
+    if (trimmed.length < 3)                 { set({ loading: false, error: 'At least 3 characters' }); return; }
+    if (trimmed.length > 20)                { set({ loading: false, error: '20 characters max' }); return; }
+    if (!/^[a-zA-Z0-9_-]+$/.test(trimmed)) { set({ loading: false, error: 'Letters, numbers, - and _ only' }); return; }
 
-    const usernameKey = trimmed.toLowerCase();
+    const key = trimmed.toLowerCase();
 
     try {
-      // Atomically claim the username
-      await runTransaction(db, async (tx) => {
-        const usernameRef = doc(db, 'usernames', usernameKey);
-        const existing = await tx.get(usernameRef);
-        if (existing.exists()) throw new Error('Username already taken');
+      const usernameSnap = await getDoc(doc(db, 'usernames', key));
 
+      if (usernameSnap.exists()) {
+        // Username taken — log straight in as that player
+        const { uid } = usernameSnap.data() as { uid: string };
+        const playerSnap = await getDoc(doc(db, 'users', uid));
+        const player = playerSnap.data() as Player;
+        localStorage.setItem(LS_KEY, uid);
+        set({ user: { uid }, player, loading: false });
+      } else {
+        // New username — claim it
+        const uid = randomUid();
         const player: Player = {
-          id: user.uid,
+          id: uid,
           username: trimmed,
           gamesPlayed: 0,
           wins: 0,
           createdAt: Date.now(),
         };
 
-        tx.set(doc(db, 'users', user.uid), player);
-        tx.set(usernameRef, { username: usernameKey, uid: user.uid });
-      });
+        await runTransaction(db, async (tx) => {
+          const check = await tx.get(doc(db, 'usernames', key));
+          if (check.exists()) throw new Error('Username just taken — try another');
+          tx.set(doc(db, 'users', uid), player);
+          tx.set(doc(db, 'usernames', key), { uid, username: trimmed });
+        });
 
-      const snap = await getDoc(doc(db, 'users', user.uid));
-      set({ player: snap.data() as Player, loading: false, needsUsername: false });
+        localStorage.setItem(LS_KEY, uid);
+        set({ user: { uid }, player, loading: false });
+      }
     } catch (e: any) {
-      set({ loading: false, error: e.message ?? 'Could not claim username' });
+      set({ loading: false, error: e.message ?? 'Something went wrong' });
     }
   },
 
-  signOut: async () => {
-    await firebaseSignOut(auth);
-    // After sign-out, init will fire again and create a new anonymous session
-    set({ user: null, player: null, needsUsername: true });
+  signOut: () => {
+    localStorage.removeItem(LS_KEY);
+    set({ user: null, player: null });
   },
 
   clearError: () => set({ error: null }),

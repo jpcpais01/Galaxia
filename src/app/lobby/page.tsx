@@ -9,10 +9,7 @@ export default function LobbyPage() {
   const { user, initialized, init } = useAuthStore();
   const router = useRouter();
 
-  useEffect(() => {
-    const unsub = init();
-    return unsub;
-  }, []);
+  useEffect(() => { init(); }, []);
 
   useEffect(() => {
     if (initialized && !user) router.replace('/');

@@ -11,13 +11,10 @@ export default function GamePage() {
   const gameId = params.gameId as string;
   const router = useRouter();
 
-  const { user, player, initialized, init } = useAuthStore();
+  const { user, initialized, init } = useAuthStore();
   const { subscribeToGame, unsubscribe } = useGameStore();
 
-  useEffect(() => {
-    const unsub = init();
-    return unsub;
-  }, []);
+  useEffect(() => { init(); }, []);
 
   useEffect(() => {
     if (initialized && !user) router.replace('/');
@@ -26,10 +23,7 @@ export default function GamePage() {
   useEffect(() => {
     if (!user || !gameId) return;
     const unsub = subscribeToGame(gameId, user.uid);
-    return () => {
-      unsub();
-      unsubscribe();
-    };
+    return () => { unsub(); unsubscribe(); };
   }, [gameId, user?.uid]);
 
   if (!initialized || !user) return null;

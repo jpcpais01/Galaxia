@@ -46,7 +46,7 @@ function StarField() {
 }
 
 export default function LoginScreen() {
-  const { claimUsername, loading, error, clearError } = useAuthStore();
+  const { enter: claimUsername, loading, error, clearError } = useAuthStore();
   const [username, setUsername] = useState('');
 
   const handleSubmit = async (e: React.FormEvent) => {
