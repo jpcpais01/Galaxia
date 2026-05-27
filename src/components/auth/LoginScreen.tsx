@@ -46,13 +46,13 @@ function StarField() {
 }
 
 export default function LoginScreen() {
-  const { enter, loading, error, clearError } = useAuthStore();
+  const { claimUsername, loading, error, clearError } = useAuthStore();
   const [username, setUsername] = useState('');
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     clearError();
-    await enter(username);
+    await claimUsername(username);
   };
 
   return (
@@ -73,7 +73,7 @@ export default function LoginScreen() {
 
         {/* Form */}
         <form onSubmit={handleSubmit} className="w-full pixel-panel-glow p-6 flex flex-col gap-5">
-          <div className="panel-header text-center">ENTER YOUR NAME</div>
+          <div className="panel-header text-center">CHOOSE YOUR NAME</div>
 
           <div className="flex flex-col gap-2">
             <input
@@ -82,7 +82,7 @@ export default function LoginScreen() {
               onChange={e => { setUsername(e.target.value); clearError(); }}
               placeholder="commander name..."
               maxLength={20}
-              autoComplete="username"
+              autoComplete="off"
               autoFocus
               spellCheck={false}
               className="
@@ -114,8 +114,7 @@ export default function LoginScreen() {
         </form>
 
         <p className="font-mono text-[9px] text-[#1a2a3a] text-center leading-relaxed">
-          New name? A new commander is created.<br />
-          Returning? You'll jump back in.
+          Pick a unique name to begin your conquest.
         </p>
       </div>
     </div>

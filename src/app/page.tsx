@@ -6,7 +6,7 @@ import { useAuthStore } from '@/store/auth-store';
 import LoginScreen from '@/components/auth/LoginScreen';
 
 export default function HomePage() {
-  const { user, initialized, init } = useAuthStore();
+  const { user, player, initialized, needsUsername, init } = useAuthStore();
   const router = useRouter();
 
   useEffect(() => {
@@ -15,10 +15,10 @@ export default function HomePage() {
   }, []);
 
   useEffect(() => {
-    if (initialized && user) {
+    if (initialized && user && player && !needsUsername) {
       router.replace('/lobby');
     }
-  }, [initialized, user]);
+  }, [initialized, user, player, needsUsername]);
 
   if (!initialized) {
     return (
@@ -30,5 +30,9 @@ export default function HomePage() {
     );
   }
 
-  return <LoginScreen />;
+  if (needsUsername || !player) {
+    return <LoginScreen />;
+  }
+
+  return null;
 }
