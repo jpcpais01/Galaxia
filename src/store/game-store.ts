@@ -90,12 +90,19 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const seed = Math.floor(Math.random() * 99999) + 1;
     const galaxy = generateGalaxy(seed);
 
+    const gameId        = `game_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
+    const hostEmpireId  = `empire_${hostPlayerId}`;
+    const homeId        = findHomeSystem(galaxy, 0);
+    const homeSystem    = galaxy.systems.find(s => s.id === homeId)!;
+    const homePlanet    = homeSystem.planets.filter(p => p.colonizable).sort((a, b) => b.similarity - a.similarity)[0] ?? null;
+    const homeStation   = { id: `stn_home_${hostEmpireId}`, type: 'space_station' as StationType, systemId: homeId, level: 1, ownerId: hostEmpireId, buildStartedTick: 0, buildCompletedTick: 0 };
+
     const systemStates: Record<string, SystemState> = {};
     for (const sys of galaxy.systems) {
       systemStates[sys.id] = { systemId: sys.id, surveyedBy: [] };
     }
+    systemStates[homeId] = { systemId: homeId, surveyedBy: [], ownerId: hostEmpireId, stationId: homeStation.id };
 
-    const gameId = `game_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
     const game: GameMeta = {
       id: gameId, name, status: 'lobby',
       createdBy: hostPlayerId, createdByUsername: hostUsername,
@@ -104,14 +111,11 @@ export const useGameStore = create<GameStore>((set, get) => ({
       seed, galaxy, systemStates, assembly: [],
     };
 
-    // Strip galaxy — clients regenerate it from seed; only store lightweight metadata
     const { galaxy: _g, ...gameDoc } = game;
     await setDoc(doc(db, 'games', gameId), gameDoc);
 
-    // Create host empire
-    const homeId = findHomeSystem(galaxy, 0);
     const empire: Empire = {
-      id: `empire_${hostPlayerId}`,
+      id: hostEmpireId,
       playerId: hostPlayerId,
       username: hostUsername,
       color: EMPIRE_COLORS[0],
@@ -119,10 +123,10 @@ export const useGameStore = create<GameStore>((set, get) => ({
       homeSystemId: homeId,
       resources: { ...STARTING_RESOURCES },
       resourceRates: { energy: 5, food: 0, minerals: 0, research: 5, compute: 0, credits: 10, population: 0 },
-      controlledSystems: [],
-      colonizedPlanets: [],
+      controlledSystems: [homeId],
+      colonizedPlanets: homePlanet ? [homePlanet.id] : [],
       infrastructure: [],
-      stations: [],
+      stations: [homeStation],
       ships: [],
       shipDesigns: STARTER_DESIGNS.map((d, i) => ({ ...d, id: `design_${hostPlayerId}_${i}` })),
       completedResearch: [],
@@ -149,9 +153,14 @@ export const useGameStore = create<GameStore>((set, get) => ({
     if (existingEmpires.docs.some(d => d.data().playerId === playerId)) return;
     const count = existingEmpires.size;
 
-    const homeId = findHomeSystem(galaxy, count);
+    const homeId      = findHomeSystem(galaxy, count);
+    const homeSystem  = galaxy.systems.find(s => s.id === homeId)!;
+    const homePlanet  = homeSystem.planets.filter(p => p.colonizable).sort((a, b) => b.similarity - a.similarity)[0] ?? null;
+    const empireId    = `empire_${playerId}`;
+    const homeStation = { id: `stn_home_${empireId}`, type: 'space_station' as StationType, systemId: homeId, level: 1, ownerId: empireId, buildStartedTick: 0, buildCompletedTick: 0 };
+
     const empire: Empire = {
-      id: `empire_${playerId}`,
+      id: empireId,
       playerId,
       username,
       color,
@@ -159,10 +168,10 @@ export const useGameStore = create<GameStore>((set, get) => ({
       homeSystemId: homeId,
       resources: { ...STARTING_RESOURCES },
       resourceRates: { energy: 5, food: 0, minerals: 0, research: 5, compute: 0, credits: 10, population: 0 },
-      controlledSystems: [],
-      colonizedPlanets: [],
+      controlledSystems: [homeId],
+      colonizedPlanets: homePlanet ? [homePlanet.id] : [],
       infrastructure: [],
-      stations: [],
+      stations: [homeStation],
       ships: [],
       shipDesigns: STARTER_DESIGNS.map((d, i) => ({ ...d, id: `design_${playerId}_${i}` })),
       completedResearch: [],
@@ -176,7 +185,11 @@ export const useGameStore = create<GameStore>((set, get) => ({
     };
 
     await setDoc(doc(db, 'games', gameId, 'empires', empire.id), empire);
-    await updateDoc(doc(db, 'games', gameId), { currentPlayers: count + 1 });
+    await updateDoc(doc(db, 'games', gameId), {
+      currentPlayers: count + 1,
+      [`systemStates.${homeId}.ownerId`]: empireId,
+      [`systemStates.${homeId}.stationId`]: homeStation.id,
+    });
   },
 
   startGame: async (gameId) => {
@@ -188,11 +201,26 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
     const bots: Empire[] = [];
     for (let i = 0; i < game.botCount; i++) {
-      const homeId = findHomeSystem(game.galaxy, existingCount + i);
+      const homeId     = findHomeSystem(game.galaxy, existingCount + i);
+      const homeSystem = game.galaxy.systems.find(s => s.id === homeId)!;
+      const homePlanet = homeSystem.planets.filter(p => p.colonizable).sort((a, b) => b.similarity - a.similarity)[0] ?? null;
+      const botId      = `bot_empire_${i}`;
+      const homeStation = { id: `stn_home_${botId}`, type: 'space_station' as StationType, systemId: homeId, level: 1, ownerId: botId, buildStartedTick: 0, buildCompletedTick: 0 };
+
       const botData = createBotEmpire(i, homeId, existingCount + game.botCount);
-      const bot: Empire = { ...botData, id: `bot_empire_${i}` };
+      const bot: Empire = {
+        ...botData,
+        id: botId,
+        controlledSystems: [homeId],
+        colonizedPlanets: homePlanet ? [homePlanet.id] : [],
+        stations: [homeStation],
+      };
       bots.push(bot);
       await setDoc(doc(db, 'games', gameId, 'empires', bot.id), bot);
+      await updateDoc(doc(db, 'games', gameId), {
+        [`systemStates.${homeId}.ownerId`]: botId,
+        [`systemStates.${homeId}.stationId`]: homeStation.id,
+      });
     }
 
     await updateDoc(doc(db, 'games', gameId), {
@@ -220,6 +248,13 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const empireSub = onSnapshot(collection(db, 'games', gameId, 'empires'), snap => {
       const empires = snap.docs.map(d => d.data() as Empire);
       const myEmpire = empires.find(e => e.playerId === playerId) ?? null;
+      // Mark colonizable planets in every empire's home system as resource-rich
+      if (cachedGalaxy) {
+        for (const empire of empires) {
+          const homeSys = cachedGalaxy.systems.find(s => s.id === empire.homeSystemId);
+          if (homeSys) homeSys.planets.forEach(p => { if (p.colonizable) p.hasResources = true; });
+        }
+      }
       set({ empires, myEmpire });
     });
     unsubs.push(empireSub);
