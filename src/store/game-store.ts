@@ -66,9 +66,9 @@ const DEFAULT_UI: UIState = {
   selectedPlanetId: null,
   activePanel: 'none',
   hoverSystemId: null,
-  cameraX: 0,
-  cameraY: 0,
-  cameraZoom: 1,
+  cameraX: 1000,   // galaxy center (GALAXY_WIDTH / 2)
+  cameraY: 1000,   // galaxy center (GALAXY_HEIGHT / 2)
+  cameraZoom: 0.5, // zoomed out enough to see the full galaxy on entry
 };
 
 export const useGameStore = create<GameStore>((set, get) => ({

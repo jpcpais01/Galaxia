@@ -9,6 +9,11 @@ import { SeededRandom } from '@/lib/noise';
 interface BgStar { x: number; y: number; r: number; a: number; phase: number; }
 interface Nebula  { x: number; y: number; rx: number; ry: number; rot: number; c1: string; c2: string; a: number; }
 
+/* ─── Galaxy world-space constants ───────────────────────────────── */
+const GCX = 1000; // galaxy center X  (GALAXY_WIDTH  / 2)
+const GCY = 1000; // galaxy center Y  (GALAXY_HEIGHT / 2)
+const GR  = 850;  // galaxy radius
+
 /* ─── Scene generators ───────────────────────────────────────────── */
 // Background stars use normalised [0,1] screen-space coordinates so they
 // always fill the entire canvas regardless of camera pan / zoom.
@@ -108,7 +113,25 @@ export default function GalaxyCanvas() {
     ctx.fillStyle = bg;
     ctx.fillRect(0, 0, CW, CH);
 
-    /* ── 2. Nebulae (colourful elliptical clouds) ─────────────────── */
+    /* ── 2. Galaxy core glow — circular blob, fades to 1.5× radius ── */
+    {
+      const { sx: gcx, sy: gcy } = w2s(GCX, GCY, CW, CH);
+      const coreR  = GR * 1.5 * Z;           // outer edge = 1.5× galaxy radius
+      const core   = ctx.createRadialGradient(gcx, gcy, 0, gcx, gcy, coreR);
+      // Bright blue-white nucleus → deep blue-purple → fully transparent
+      core.addColorStop(0,    'rgba(200, 215, 255, 0.13)');
+      core.addColorStop(0.12, 'rgba(160, 185, 255, 0.10)');
+      core.addColorStop(0.30, 'rgba(100, 130, 220, 0.07)');
+      core.addColorStop(0.55, 'rgba( 60,  90, 170, 0.04)');
+      core.addColorStop(0.78, 'rgba( 30,  50, 120, 0.02)');
+      core.addColorStop(1,    'transparent');
+      ctx.fillStyle = core;
+      ctx.beginPath();
+      ctx.arc(gcx, gcy, coreR, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    /* ── 3. Nebulae (colourful elliptical clouds) ─────────────────── */
     for (const neb of nebRef.current) {
       const { sx, sy } = w2s(neb.x, neb.y, CW, CH);
       ctx.save();
@@ -130,7 +153,7 @@ export default function GalaxyCanvas() {
     }
     ctx.globalAlpha = 1;
 
-    /* ── 3. Three-layer starfield (screen-space — always fills canvas) */
+    /* ── 4. Three-layer starfield (screen-space — always fills canvas) */
     const layerColors = ['#7788bb', '#99aadd', '#ffffff'];
     for (let l = 0; l < 3; l++) {
       for (const s of bgRef.current[l] ?? []) {
