@@ -924,18 +924,14 @@ function processFleetMovement(fleet: Fleet, ships: Ship[]): Fleet {
   if (fleet.state === 'in_transit' && fleet.transitToSystemId !== undefined) {
     const progress = (fleet.transitProgress ?? 0) + fleetSpeed / 500;
     if (progress >= 1) {
-      // Arrived; place on opposite side from where it came
+      // Arrived; strip all transit/movement fields (Firestore rejects `undefined`)
+      const { transitToSystemId, transitFromSystemId, transitProgress, targetPosX, targetPosY, task, ...rest } = fleet;
       return {
-        ...fleet,
-        systemId: fleet.transitToSystemId,
+        ...rest,
+        systemId: transitToSystemId,
         posX: 0.1,
         posY: 0.5,
-        state: 'idle',
-        transitToSystemId: undefined,
-        transitFromSystemId: undefined,
-        transitProgress: undefined,
-        targetPosX: undefined,
-        targetPosY: undefined,
+        state: 'idle' as const,
       };
     }
     return { ...fleet, transitProgress: progress };
@@ -947,13 +943,13 @@ function processFleetMovement(fleet: Fleet, ships: Ship[]): Fleet {
     const dy = fleet.targetPosY - fleet.posY;
     const dist = Math.sqrt(dx * dx + dy * dy);
     if (dist < 0.02) {
+      // Strip movement fields — Firestore rejects `undefined` values
+      const { targetPosX, targetPosY, ...rest } = fleet;
       return {
-        ...fleet,
-        posX: fleet.targetPosX,
-        posY: fleet.targetPosY,
-        state: 'idle',
-        targetPosX: undefined,
-        targetPosY: undefined,
+        ...rest,
+        posX: targetPosX,
+        posY: targetPosY,
+        state: 'idle' as const,
       };
     }
     const step = fleetSpeed * 0.003;
