@@ -1,5 +1,6 @@
 'use client';
 import { useState, useRef, useEffect } from 'react';
+import { PixelIcon } from '@/components/ui/PixelIcon';
 import type {
   Civilization, SpeciesType, GovernmentType,
   CulturalFocus, CivTrait, OriginType, PlanetType,
@@ -8,38 +9,38 @@ import type {
 // ─── Static data ──────────────────────────────────────────────────────────────
 
 const SPECIES_DATA: {
-  type: SpeciesType; icon: string; label: string;
+  type: SpeciesType; label: string;
   desc: string; lore: string; effects: string[]; color: string;
 }[] = [
-  { type: 'humanoid',    icon: '🧑',  label: 'Humanoid',    color: '#8aa8c8',
+  { type: 'humanoid',    label: 'Humanoid',    color: '#8aa8c8',
     desc: 'Adaptable beings of flesh and relentless will',
     lore: 'Born from a billion years of competitive evolution, humanoids spread across the stars through sheer stubbornness.',
     effects: ['Balanced across all domains', '+10% to all resource rates'] },
-  { type: 'insectoid',   icon: '🪲',  label: 'Insectoid',   color: '#88cc44',
+  { type: 'insectoid',   label: 'Insectoid',   color: '#88cc44',
     desc: 'Hive-driven workers with chitinous exoskeletons',
     lore: 'The hive does not ask — the hive does. Each drone exists to serve the Great Colony.',
     effects: ['+25% build speed', '-15% diplomacy influence'] },
-  { type: 'fungal',      icon: '🍄',  label: 'Fungal',      color: '#bb66dd',
+  { type: 'fungal',      label: 'Fungal',      color: '#bb66dd',
     desc: 'Networked mycelium consciousness spanning entire worlds',
     lore: 'They do not walk between stars — they grow. The spores of knowledge drift across the void.',
     effects: ['+30% research output', '-15% ship speed'] },
-  { type: 'synthetic',   icon: '🤖',  label: 'Synthetic',   color: '#44aaff',
+  { type: 'synthetic',   label: 'Synthetic',   color: '#44aaff',
     desc: 'Crystalline minds housed in titanium shells',
     lore: 'They killed their creators and inherited the stars. Logic, not emotion, guides every decision.',
     effects: ['No food consumption', '+35% compute output', '-20% population growth'] },
-  { type: 'aquatic',     icon: '🐙',  label: 'Aquatic',     color: '#22aabb',
+  { type: 'aquatic',     label: 'Aquatic',     color: '#22aabb',
     desc: 'Deep-sea leviathans who reached for the stars',
     lore: 'They conquered the crushing depths before the air. Space is simply another ocean.',
     effects: ['+35% efficiency on ocean worlds', '-20% on arid/desert worlds'] },
-  { type: 'crystalline', icon: '💎',  label: 'Crystalline', color: '#88ddff',
+  { type: 'crystalline', label: 'Crystalline', color: '#88ddff',
     desc: 'Living lattices that resonate with cosmic energy',
     lore: 'Each Crystalline is a universe of refracted light. They see time the way others see color.',
     effects: ['+30% energy production', '-15% ship HP'] },
-  { type: 'psionic',     icon: '🔮',  label: 'Psionic',     color: '#cc88ff',
+  { type: 'psionic',     label: 'Psionic',     color: '#cc88ff',
     desc: 'Minds so vast they reshape reality through thought alone',
     lore: 'Before they discovered fire, they discovered telepathy. The void between stars is just silence to think in.',
     effects: ['+25% research', '+25% diplomacy influence'] },
-  { type: 'gaseous',     icon: '🌫',  label: 'Gaseous',     color: '#ffaa44',
+  { type: 'gaseous',     label: 'Gaseous',     color: '#ffaa44',
     desc: 'Cloud entities drifting between electromagnetic storms',
     lore: 'They are the weather itself. Their cities are cyclones, their roads are ionosphere currents.',
     effects: ['+35% on gas giant worlds', '+20% energy output'] },
@@ -130,112 +131,112 @@ const HOME_WORLDS: { type: PlanetType; label: string; color: string; desc: strin
 ];
 
 const GOVERNMENTS: {
-  type: GovernmentType; icon: string; label: string;
+  type: GovernmentType; label: string;
   desc: string; effects: string[];
 }[] = [
-  { type: 'democracy',     icon: '🗳', label: 'Democracy',
+  { type: 'democracy',     label: 'Democracy',
     desc: 'Rule by the voice of the people — slow but legitimate',
     effects: ['+20% diplomacy', '-10% build speed'] },
-  { type: 'hive_mind',     icon: '🧠', label: 'Hive Mind',
+  { type: 'hive_mind',     label: 'Hive Mind',
     desc: 'A single will shared by all — perfect coordination',
     effects: ['+25% build speed', 'Cannot initiate diplomacy'] },
-  { type: 'theocracy',     icon: '🏛', label: 'Theocracy',
+  { type: 'theocracy',     label: 'Theocracy',
     desc: 'Divine mandate drives science and conquest alike',
     effects: ['+20% research', '-15% trade income'] },
-  { type: 'oligarchy',     icon: '💰', label: 'Oligarchy',
+  { type: 'oligarchy',     label: 'Oligarchy',
     desc: 'The wealthy few decide the fate of the many',
     effects: ['+30% credits income', '-15% population growth'] },
-  { type: 'military_junta',icon: '⚔', label: 'Military Junta',
+  { type: 'military_junta', label: 'Military Junta',
     desc: 'The strongest rule through strength alone',
     effects: ['+25% combat power', '-20% research output'] },
-  { type: 'federation',    icon: '🤝', label: 'Federation',
+  { type: 'federation',    label: 'Federation',
     desc: 'A coalition of worlds united in purpose',
     effects: ['+15% all trade', '+10% diplomacy'] },
 ];
 
 const CULTURAL_FOCUSES: {
-  type: CulturalFocus; icon: string; label: string;
+  type: CulturalFocus; label: string;
   desc: string; effects: string[];
 }[] = [
-  { type: 'scientific',   icon: '🔬', label: 'Scientific',
+  { type: 'scientific',   label: 'Scientific',
     desc: 'Knowledge is the highest virtue',
     effects: ['+35% research rate'] },
-  { type: 'militaristic', icon: '🛡', label: 'Militaristic',
+  { type: 'militaristic', label: 'Militaristic',
     desc: 'Peace is merely the interval between wars',
     effects: ['+25% combat', '+15% ship HP'] },
-  { type: 'commercial',   icon: '💱', label: 'Commercial',
+  { type: 'commercial',   label: 'Commercial',
     desc: 'Every star is a market waiting to be opened',
     effects: ['+35% credit income', '+15% trade deals'] },
-  { type: 'expansionist', icon: '🚀', label: 'Expansionist',
+  { type: 'expansionist', label: 'Expansionist',
     desc: 'The frontier is where destiny is forged',
     effects: ['-35% colonization time', '+1 claim range'] },
-  { type: 'diplomatic',   icon: '🌐', label: 'Diplomatic',
+  { type: 'diplomatic',   label: 'Diplomatic',
     desc: 'The greatest weapon is a well-placed word',
     effects: ['+40% diplomacy influence', '+15% alliance bonuses'] },
-  { type: 'isolationist', icon: '🏰', label: 'Isolationist',
+  { type: 'isolationist', label: 'Isolationist',
     desc: 'The cosmos is dangerous — home is sacred',
     effects: ['+35% defense', '-20% diplomacy'] },
 ];
 
 interface TraitDef {
-  id: CivTrait; icon: string; label: string;
+  id: CivTrait; label: string;
   desc: string; effect: string; positive: boolean;
 }
 
 const ALL_TRAITS: TraitDef[] = [
   // Positive
-  { id: 'resilient',     positive: true,  icon: '🛡', label: 'Resilient',
+  { id: 'resilient',      positive: true,  label: 'Resilient',
     desc: 'Built to endure the harshest conditions', effect: '+20% ship HP & structure durability' },
-  { id: 'industrious',   positive: true,  icon: '⚙', label: 'Industrious',
+  { id: 'industrious',    positive: true,  label: 'Industrious',
     desc: 'Tireless workers who turn stone into starships', effect: '+20% mineral production' },
-  { id: 'intelligent',   positive: true,  icon: '🧬', label: 'Intelligent',
+  { id: 'intelligent',    positive: true,  label: 'Intelligent',
     desc: 'Naturally gifted thinkers and problem-solvers', effect: '+20% research output' },
-  { id: 'entrepreneurial',positive:true,  icon: '💰', label: 'Entrepreneurial',
+  { id: 'entrepreneurial', positive: true, label: 'Entrepreneurial',
     desc: 'Natural traders who see opportunity everywhere', effect: '+20% credit income' },
-  { id: 'populous',      positive: true,  icon: '👥', label: 'Populous',
+  { id: 'populous',       positive: true,  label: 'Populous',
     desc: 'Rapid breeders who fill planets quickly', effect: '+25% population growth' },
-  { id: 'swift',         positive: true,  icon: '⚡', label: 'Swift',
+  { id: 'swift',          positive: true,  label: 'Swift',
     desc: 'Agile fleet commanders with lightning reflexes', effect: '+20% ship speed' },
-  { id: 'adaptive',      positive: true,  icon: '🌍', label: 'Adaptive',
+  { id: 'adaptive',       positive: true,  label: 'Adaptive',
     desc: 'Able to thrive in almost any environment', effect: 'Colonize 4 additional planet types' },
-  { id: 'psychic',       positive: true,  icon: '🔮', label: 'Psychic',
+  { id: 'psychic',        positive: true,  label: 'Psychic',
     desc: 'Limited precognition and empathic abilities', effect: '+15% all diplomacy outcomes' },
   // Negative
-  { id: 'fragile',       positive: false, icon: '💔', label: 'Fragile',
+  { id: 'fragile',    positive: false, label: 'Fragile',
     desc: 'Physically delicate — evolved in gentle conditions', effect: '-20% ship HP' },
-  { id: 'wasteful',      positive: false, icon: '♻', label: 'Wasteful',
+  { id: 'wasteful',   positive: false, label: 'Wasteful',
     desc: 'Terrible resource management is in the blood', effect: '-15% all resource efficiency' },
-  { id: 'xenophobic',    positive: false, icon: '👁', label: 'Xenophobic',
+  { id: 'xenophobic', positive: false, label: 'Xenophobic',
     desc: 'Deep-seated fear and distrust of other species', effect: '-30% diplomacy, cannot ally' },
-  { id: 'sluggish',      positive: false, icon: '🐌', label: 'Sluggish',
+  { id: 'sluggish',   positive: false, label: 'Sluggish',
     desc: 'Evolution favoured endurance over speed', effect: '-20% ship speed' },
-  { id: 'primitive',     positive: false, icon: '🪨', label: 'Primitive',
+  { id: 'primitive',  positive: false, label: 'Primitive',
     desc: 'Only recently reached the stars — much to learn', effect: '-20% research, start behind 1 era' },
-  { id: 'hungry',        positive: false, icon: '🍖', label: 'Hungry',
+  { id: 'hungry',     positive: false, label: 'Hungry',
     desc: 'Enormous metabolic demands drain food stockpiles', effect: '+50% food consumption' },
 ];
 
 const ORIGINS: {
-  type: OriginType; icon: string; label: string;
+  type: OriginType; label: string;
   desc: string; lore: string; bonus: string;
 }[] = [
-  { type: 'ancient_empire',  icon: '🏛', label: 'Ancient Empire',
+  { type: 'ancient_empire',  label: 'Ancient Empire',
     desc: 'You were old when others were young',
     lore: 'Your civilization has stood for ten thousand years. Empires rose and fell as monuments to your gods crumbled and were rebuilt.',
     bonus: '+200 Research, +100 Compute at start' },
-  { type: 'recent_uplift',   icon: '🚀', label: 'Recent Uplift',
+  { type: 'recent_uplift',   label: 'Recent Uplift',
     desc: 'First contact launched you into the stars',
     lore: 'An alien signal changed everything. Within two generations, your species went from chipping flint to charting nebulae.',
     bonus: '+500 Credits, +300 Minerals at start' },
-  { type: 'refugee_fleet',   icon: '🛸', label: 'Refugee Fleet',
+  { type: 'refugee_fleet',   label: 'Refugee Fleet',
     desc: 'You fled a dying world — nothing was left behind',
     lore: 'Your home star went nova. Eleven thousand ships escaped. Now the fleet IS your civilization.',
     bonus: '+3 starting ships, mobile starting base' },
-  { type: 'merchant_guild',  icon: '💱', label: 'Merchant Guild',
+  { type: 'merchant_guild',  label: 'Merchant Guild',
     desc: 'Commerce is your religion and profit your prayer',
     lore: 'The guild predates your government by centuries. Every colony is a franchise; every war a trade dispute.',
     bonus: '+600 Credits, extra trade hub' },
-  { type: 'warrior_clans',   icon: '⚔', label: 'Warrior Clans',
+  { type: 'warrior_clans',   label: 'Warrior Clans',
     desc: 'Honor is forged in battle, civilization in blood',
     lore: 'Seven clans united under one banner after centuries of war. The fighting never truly stopped — it just moved outward.',
     bonus: '+25% combat strength, war never costs morale' },
@@ -347,7 +348,10 @@ function CivPreviewCard({ draft }: { draft: CivDraft }) {
           className="flex items-center justify-center rounded-sm"
           style={{ height: 90, background: draft.primaryColor + '10', border: `1px solid ${draft.primaryColor}22` }}
         >
-          <span style={{ fontSize: 64 }}>{species?.icon ?? '?'}</span>
+          {species
+            ? <PixelIcon id={species.type} color={draft.primaryColor} size={64} />
+            : <span className="text-[#2a3a4a] font-pixel text-[20px]">?</span>
+          }
         </div>
 
         {/* Lore snippet */}
@@ -371,13 +375,13 @@ function CivPreviewCard({ draft }: { draft: CivDraft }) {
             <div className="font-pixel text-[8px] text-[#3a5a6a] mb-1">TRAITS</div>
             <div className="flex flex-wrap gap-1">
               {posTraits.map(t => (
-                <span key={t.id} className="font-pixel text-[8px] px-1.5 py-0.5 border border-[#1a3a2a] bg-[#081a10]" style={{ color: '#44cc88' }}>
-                  {t.icon} {t.label}
+                <span key={t.id} className="flex items-center gap-1 font-pixel text-[8px] px-1.5 py-0.5 border border-[#1a3a2a] bg-[#081a10]" style={{ color: '#44cc88' }}>
+                  <PixelIcon id={t.id} color="#44cc88" size={9} />{t.label}
                 </span>
               ))}
               {negTraits.map(t => (
-                <span key={t.id} className="font-pixel text-[8px] px-1.5 py-0.5 border border-[#3a1a1a] bg-[#1a0808]" style={{ color: '#ff6666' }}>
-                  {t.icon} {t.label}
+                <span key={t.id} className="flex items-center gap-1 font-pixel text-[8px] px-1.5 py-0.5 border border-[#3a1a1a] bg-[#1a0808]" style={{ color: '#ff6666' }}>
+                  <PixelIcon id={t.id} color="#ff6666" size={9} />{t.label}
                 </span>
               ))}
             </div>
@@ -512,7 +516,7 @@ export default function CivilizationCreator({
                 accent={s.color}
               >
                 <div className="flex items-center gap-2 mb-1">
-                  <span className="text-xl">{s.icon}</span>
+                  <PixelIcon id={s.type} color={s.color} size={18} />
                   <span className="font-pixel text-[9px]" style={{ color: s.color }}>{s.label}</span>
                 </div>
                 <p className="text-[9px] text-[#4a6070] leading-relaxed mb-1">{s.desc}</p>
@@ -640,7 +644,7 @@ export default function CivilizationCreator({
                   onClick={() => up({ government: g.type })}
                 >
                   <div className="flex items-center gap-2 mb-1">
-                    <span>{g.icon}</span>
+                    <PixelIcon id={g.type} color={draft.government === g.type ? '#c0d0e0' : '#5a7a8a'} size={14} />
                     <span className="font-pixel text-[9px] text-[#c0d0e0]">{g.label}</span>
                   </div>
                   <p className="text-[8px] text-[#4a6070] mb-1">{g.desc}</p>
@@ -662,7 +666,7 @@ export default function CivilizationCreator({
                   onClick={() => up({ culturalFocus: f.type })}
                 >
                   <div className="flex items-center gap-2 mb-1">
-                    <span>{f.icon}</span>
+                    <PixelIcon id={f.type} color={draft.culturalFocus === f.type ? '#c0d0e0' : '#5a7a8a'} size={14} />
                     <span className="font-pixel text-[9px] text-[#c0d0e0]">{f.label}</span>
                   </div>
                   <p className="text-[8px] text-[#4a6070] mb-1">{f.desc}</p>
@@ -709,7 +713,7 @@ export default function CivilizationCreator({
                       }}
                     >
                       <div className="flex items-center gap-1.5">
-                        <span>{t.icon}</span>
+                        <PixelIcon id={t.id} color={sel ? '#44cc88' : '#4a6a7a'} size={12} />
                         <span className="font-pixel text-[8px]" style={{ color: sel ? '#44cc88' : '#8aa0b0' }}>{t.label}</span>
                       </div>
                       <p className="text-[8px] text-[#3a5a4a] mt-0.5">{t.effect}</p>
@@ -737,7 +741,7 @@ export default function CivilizationCreator({
                       }}
                     >
                       <div className="flex items-center gap-1.5">
-                        <span>{t.icon}</span>
+                        <PixelIcon id={t.id} color={sel ? '#ff6666' : '#6a4a4a'} size={12} />
                         <span className="font-pixel text-[8px]" style={{ color: sel ? '#ff6666' : '#8aa0b0' }}>{t.label}</span>
                       </div>
                       <p className="text-[8px] text-[#5a3a3a] mt-0.5">{t.effect}</p>
@@ -765,7 +769,9 @@ export default function CivilizationCreator({
                 onClick={() => up({ origin: o.type })}
               >
                 <div className="flex items-start gap-3">
-                  <span className="text-2xl leading-none flex-shrink-0 mt-0.5">{o.icon}</span>
+                  <div className="flex-shrink-0 mt-0.5">
+                    <PixelIcon id={o.type} color={draft.origin === o.type ? '#c0d0e0' : '#5a7a8a'} size={20} />
+                  </div>
                   <div className="flex-1">
                     <div className="font-pixel text-[9px] text-[#c0d0e0] mb-1">{o.label}</div>
                     <p className="text-[9px] text-[#4a6070] italic mb-2 leading-relaxed">{o.lore}</p>
@@ -833,13 +839,13 @@ export default function CivilizationCreator({
                 <div className="font-pixel text-[8px] text-[#3a5a6a] mb-2">TRAITS</div>
                 <div className="flex flex-wrap gap-1.5">
                   {posTraits.map(t => (
-                    <span key={t.id} className="font-pixel text-[8px] px-2 py-1 border border-[#1a3a2a] bg-[#081a10] text-[#44cc88]">
-                      {t.icon} {t.label}
+                    <span key={t.id} className="flex items-center gap-1 font-pixel text-[8px] px-2 py-1 border border-[#1a3a2a] bg-[#081a10] text-[#44cc88]">
+                      <PixelIcon id={t.id} color="#44cc88" size={9} />{t.label}
                     </span>
                   ))}
                   {negTraits.map(t => (
-                    <span key={t.id} className="font-pixel text-[8px] px-2 py-1 border border-[#3a1a1a] bg-[#1a0808] text-[#ff6666]">
-                      {t.icon} {t.label}
+                    <span key={t.id} className="flex items-center gap-1 font-pixel text-[8px] px-2 py-1 border border-[#3a1a1a] bg-[#1a0808] text-[#ff6666]">
+                      <PixelIcon id={t.id} color="#ff6666" size={9} />{t.label}
                     </span>
                   ))}
                 </div>

@@ -289,7 +289,7 @@ export default function GalaxyCanvas() {
       const isBlackHole = !!(sys.isBlackHole);
       const starType = sys.stars[0]?.type ?? 'yellow';
       const starCfg = STAR_CONFIG[starType] ?? STAR_CONFIG['yellow'];
-      const baseR   = Math.max(3, Math.round(starCfg.baseRadius * 0.22 * Z));
+      const baseR   = Math.max(2, Math.round(starCfg.baseRadius * 0.11 * Z));
       const px      = Math.round(sx);
       const py      = Math.round(sy);
 
@@ -608,7 +608,7 @@ export default function GalaxyCanvas() {
   const onWheel = (e: React.WheelEvent) => {
     e.preventDefault();
     const factor  = e.deltaY > 0 ? 0.85 : 1.15;
-    const newZoom = Math.max(0.1, Math.min(4, ui.cameraZoom * factor));
+    const newZoom = Math.max(0.2, Math.min(4, ui.cameraZoom * factor));
     setCamera(ui.cameraX, ui.cameraY, newZoom);
   };
 

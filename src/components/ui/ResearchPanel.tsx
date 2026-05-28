@@ -1,13 +1,14 @@
 'use client';
 import { useGameStore } from '@/store/game-store';
 import { RESEARCH_BY_PATH } from '@/lib/game/research-tree';
+import { PixelIcon } from '@/components/ui/PixelIcon';
 import type { ResearchPath } from '@/types/game';
 
 const PATH_CONFIG: Record<ResearchPath, { label: string; color: string; icon: string }> = {
-  physics:     { label: 'Physics',               color: '#4488ff', icon: '⚛' },
-  biology:     { label: 'Biology',               color: '#44cc44', icon: '🧬' },
-  engineering: { label: 'Engineering',           color: '#ff8844', icon: '⚙' },
-  ai:          { label: 'Artificial Intelligence', color: '#aa44ff', icon: '🤖' },
+  physics:     { label: 'Physics',               color: '#4488ff', icon: 'fusion_plant' },
+  biology:     { label: 'Biology',               color: '#44cc44', icon: 'hydroponic_farm' },
+  engineering: { label: 'Engineering',           color: '#ff8844', icon: 'industrious' },
+  ai:          { label: 'Artificial Intelligence', color: '#aa44ff', icon: 'ai_datacenter' },
 };
 
 const PATHS = Object.keys(PATH_CONFIG) as ResearchPath[];
@@ -46,7 +47,7 @@ export default function ResearchPanel() {
           return (
             <div key={path} className="border-b border-[#0a0a1a]">
               <div className="px-3 py-2 flex items-center gap-2" style={{ background: pcfg.color + '11' }}>
-                <span>{pcfg.icon}</span>
+                <PixelIcon id={pcfg.icon} color={pcfg.color} size={14} />
                 <span className="font-pixel text-[9px]" style={{ color: pcfg.color }}>{pcfg.label}</span>
               </div>
               <div className="px-2 py-1 flex flex-col gap-1">
@@ -74,7 +75,11 @@ export default function ResearchPanel() {
                           : ''}
                       `}
                     >
-                      <span className="text-sm mt-0.5">{done ? '✓' : active ? '⟳' : prereqsMet ? '○' : '🔒'}</span>
+                      <span className="font-mono text-[11px] mt-0.5 flex-shrink-0" style={{
+                        color: done ? '#44aa44' : active ? '#8888ff' : prereqsMet ? '#4a6a8a' : '#2a3a4a'
+                      }}>
+                        {done ? '✓' : active ? '◎' : prereqsMet ? '○' : '✕'}
+                      </span>
                       <div className="flex-1">
                         <div className="font-pixel text-[8px]" style={{
                           color: done ? '#44aa44' : active ? '#8888ff' : prereqsMet ? '#c0d0e0' : '#2a3a4a',

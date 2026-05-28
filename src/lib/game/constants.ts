@@ -72,16 +72,16 @@ export const INFRA_CONFIG: Record<InfraType, {
   output: Partial<Resources>;
   icon: string;
 }> = {
-  solar_farm:      { label: 'Solar Farm',      slots: 1, buildTicks: 6,  mineralCost: 50,  energyCost: 0,  creditCost: 20,  output: { energy: 12 },      icon: '☀' },
-  fusion_plant:    { label: 'Fusion Plant',    slots: 2, buildTicks: 20, mineralCost: 200, energyCost: 0,  creditCost: 100, output: { energy: 40 },      icon: '⚡' },
-  hydroponic_farm: { label: 'Hydro Farm',      slots: 1, buildTicks: 8,  mineralCost: 40,  energyCost: 10, creditCost: 30,  output: { food: 12 },        icon: '🌿' },
-  mining_complex:  { label: 'Mining Complex',  slots: 2, buildTicks: 12, mineralCost: 60,  energyCost: 15, creditCost: 50,  output: { minerals: 18 },    icon: '⛏' },
-  research_lab:    { label: 'Research Lab',    slots: 1, buildTicks: 15, mineralCost: 100, energyCost: 20, creditCost: 80,  output: { research: 12 },    icon: '🔬' },
-  ai_datacenter:   { label: 'AI Datacenter',   slots: 3, buildTicks: 30, mineralCost: 300, energyCost: 50, creditCost: 200, output: { compute: 25 },     icon: '💻' },
-  trade_hub:       { label: 'Trade Hub',       slots: 1, buildTicks: 10, mineralCost: 80,  energyCost: 10, creditCost: 60,  output: { credits: 24 },     icon: '💱' },
-  colony_hub:      { label: 'Colony Hub',      slots: 2, buildTicks: 20, mineralCost: 150, energyCost: 20, creditCost: 100, output: { population: 2 },   icon: '🏛' },
-  defense_battery: { label: 'Defense Battery', slots: 2, buildTicks: 25, mineralCost: 200, energyCost: 30, creditCost: 150, output: {},                  icon: '🛡' },
-  shipyard:        { label: 'Shipyard',        slots: 4, buildTicks: 50, mineralCost: 500, energyCost: 80, creditCost: 300, output: {},                  icon: '🚀' },
+  solar_farm:      { label: 'Solar Farm',      slots: 1, buildTicks: 6,  mineralCost: 50,  energyCost: 0,  creditCost: 20,  output: { energy: 12 },      icon: 'solar_farm' },
+  fusion_plant:    { label: 'Fusion Plant',    slots: 2, buildTicks: 20, mineralCost: 200, energyCost: 0,  creditCost: 100, output: { energy: 40 },      icon: 'fusion_plant' },
+  hydroponic_farm: { label: 'Hydro Farm',      slots: 1, buildTicks: 8,  mineralCost: 40,  energyCost: 10, creditCost: 30,  output: { food: 12 },        icon: 'hydroponic_farm' },
+  mining_complex:  { label: 'Mining Complex',  slots: 2, buildTicks: 12, mineralCost: 60,  energyCost: 15, creditCost: 50,  output: { minerals: 18 },    icon: 'mining_complex' },
+  research_lab:    { label: 'Research Lab',    slots: 1, buildTicks: 15, mineralCost: 100, energyCost: 20, creditCost: 80,  output: { research: 12 },    icon: 'research_lab' },
+  ai_datacenter:   { label: 'AI Datacenter',   slots: 3, buildTicks: 30, mineralCost: 300, energyCost: 50, creditCost: 200, output: { compute: 25 },     icon: 'ai_datacenter' },
+  trade_hub:       { label: 'Trade Hub',       slots: 1, buildTicks: 10, mineralCost: 80,  energyCost: 10, creditCost: 60,  output: { credits: 24 },     icon: 'trade_hub' },
+  colony_hub:      { label: 'Colony Hub',      slots: 2, buildTicks: 20, mineralCost: 150, energyCost: 20, creditCost: 100, output: { population: 2 },   icon: 'colony_hub' },
+  defense_battery: { label: 'Defense Battery', slots: 2, buildTicks: 25, mineralCost: 200, energyCost: 30, creditCost: 150, output: {},                  icon: 'defense_battery' },
+  shipyard:        { label: 'Shipyard',        slots: 4, buildTicks: 50, mineralCost: 500, energyCost: 80, creditCost: 300, output: {},                  icon: 'shipyard' },
 };
 
 export const STATION_CONFIG: Record<StationType, {
@@ -109,10 +109,10 @@ export const GROUND_OP_CONFIG: Record<GroundOpType, {
   icon: string;
   description: string;
 }> = {
-  mineral_extractor:     { label: 'Mineral Extractor',  buildTicks: 10, mineralCost: 40,  energyCost: 5,  creditCost: 20, output: { minerals: 8 },           icon: '⛏',  description: 'Extracts mineral deposits without colonization' },
-  atmospheric_processor: { label: 'Atmo Processor',     buildTicks: 15, mineralCost: 60,  energyCost: 10, creditCost: 35, output: { energy: 8, credits: 4 }, icon: '🌫', description: 'Harvests atmospheric gases for energy and trade' },
-  deep_scanner:          { label: 'Deep Scanner',       buildTicks: 8,  mineralCost: 50,  energyCost: 8,  creditCost: 30, output: { research: 6 },            icon: '📡', description: 'Scans the planetary core for research data' },
-  solar_collector:       { label: 'Solar Collector',    buildTicks: 12, mineralCost: 60,  energyCost: 0,  creditCost: 40, output: { energy: 12 },            icon: '☀',  description: 'Orbital array harvesting direct stellar radiation' },
+  mineral_extractor:     { label: 'Mineral Extractor',  buildTicks: 10, mineralCost: 40,  energyCost: 5,  creditCost: 20, output: { minerals: 8 },           icon: 'mineral_extractor',     description: 'Extracts mineral deposits without colonization' },
+  atmospheric_processor: { label: 'Atmo Processor',     buildTicks: 15, mineralCost: 60,  energyCost: 10, creditCost: 35, output: { energy: 8, credits: 4 }, icon: 'atmospheric_processor', description: 'Harvests atmospheric gases for energy and trade' },
+  deep_scanner:          { label: 'Deep Scanner',       buildTicks: 8,  mineralCost: 50,  energyCost: 8,  creditCost: 30, output: { research: 6 },            icon: 'deep_scanner',          description: 'Scans the planetary core for research data' },
+  solar_collector:       { label: 'Solar Collector',    buildTicks: 12, mineralCost: 60,  energyCost: 0,  creditCost: 40, output: { energy: 12 },            icon: 'solar_collector',       description: 'Orbital array harvesting direct stellar radiation' },
 };
 
 export const EMPIRE_COLORS = [

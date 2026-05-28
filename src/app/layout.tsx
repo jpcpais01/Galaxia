@@ -6,7 +6,6 @@ export const metadata: Metadata = {
   description: 'Real-time multiplayer space conquest. Build your empire, explore the galaxy, conquer the stars.',
   manifest: '/manifest.json',
   appleWebApp: { capable: true, statusBarStyle: 'black-translucent', title: 'Galaxia' },
-  icons: { icon: '/icon-192.png', apple: '/icon-192.png' },
 };
 
 export const viewport: Viewport = {

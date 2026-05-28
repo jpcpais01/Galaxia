@@ -10,7 +10,7 @@ import DiplomacyPanel from './DiplomacyPanel';
 import ShipDesigner from './ShipDesigner';
 import AssemblyPanel from './AssemblyPanel';
 import ColoniesPanel from './ColoniesPanel';
-import EventLog from './EventLog';
+
 import { useRouter } from 'next/navigation';
 
 function TopBar() {
@@ -179,10 +179,6 @@ export default function HUD({ children }: { children: React.ReactNode }) {
         </div>
       </div>
 
-      {/* Bottom event log */}
-      <div className="h-24 border-t border-[#1a1a3a] bg-[#050510] flex-shrink-0">
-        <EventLog />
-      </div>
     </div>
   );
 }

@@ -1,19 +1,20 @@
 'use client';
 import { useGameStore } from '@/store/game-store';
 import { PLANET_CONFIG, STAR_CONFIG, GROUND_OP_CONFIG } from '@/lib/game/constants';
+import { PixelIcon } from '@/components/ui/PixelIcon';
 import type { GroundOpType } from '@/types/game';
 
-const STAR_OPS:   { type: GroundOpType; label: string; icon: string }[] = [
-  { type: 'solar_collector',       label: 'Solar Collector',    icon: '☀' },
+const STAR_OPS:   { type: GroundOpType; label: string }[] = [
+  { type: 'solar_collector',       label: 'Solar Collector' },
 ];
-const PLANET_OPS: { type: GroundOpType; label: string; icon: string }[] = [
-  { type: 'mineral_extractor',     label: 'Mineral Extractor',  icon: '⛏' },
-  { type: 'atmospheric_processor', label: 'Atmo Processor',     icon: '🌫' },
-  { type: 'deep_scanner',          label: 'Deep Scanner',       icon: '📡' },
+const PLANET_OPS: { type: GroundOpType; label: string }[] = [
+  { type: 'mineral_extractor',     label: 'Mineral Extractor' },
+  { type: 'atmospheric_processor', label: 'Atmo Processor' },
+  { type: 'deep_scanner',          label: 'Deep Scanner' },
 ];
-const MOON_OPS: { type: GroundOpType; label: string; icon: string }[] = [
-  { type: 'mineral_extractor',     label: 'Mineral Extractor',  icon: '⛏' },
-  { type: 'deep_scanner',          label: 'Deep Scanner',       icon: '📡' },
+const MOON_OPS: { type: GroundOpType; label: string }[] = [
+  { type: 'mineral_extractor',     label: 'Mineral Extractor' },
+  { type: 'deep_scanner',          label: 'Deep Scanner' },
 ];
 
 export default function SystemPanel() {
@@ -209,19 +210,23 @@ export default function SystemPanel() {
           const hasAnything = stars.length > 0 || resourcePlanets.length > 0 || resourceMoons.length > 0;
           if (!hasAnything) return null;
 
-          const buildBtn = (targetId: string, ops: typeof PLANET_OPS) => ops.map(({ type, icon }) => {
+          const buildBtn = (targetId: string, ops: typeof PLANET_OPS) => ops.map(({ type }) => {
             const cfg = GROUND_OP_CONFIG[type];
             const already = myGroundOps.some(g => g.targetId === targetId && g.type === type);
             const affordable = (myEmpire?.resources.minerals ?? 0) >= cfg.mineralCost &&
                                (myEmpire?.resources.credits  ?? 0) >= cfg.creditCost;
+            const disabled = already || !affordable;
             return (
               <button
                 key={type}
                 onClick={() => buildGroundOp(system.id, targetId, type)}
-                disabled={already || !affordable}
+                disabled={disabled}
                 className="w-full flex items-center justify-between px-2 py-1 border border-[#1a1a2a] bg-[#05050f] hover:border-[#2a3a3a] disabled:opacity-40 disabled:cursor-not-allowed mb-0.5 font-mono text-[9px]"
               >
-                <span className="text-[#6a8a8a]">{icon} {cfg.label}</span>
+                <span className="flex items-center gap-1.5 text-[#6a8a8a]">
+                  <PixelIcon id={cfg.icon} color={disabled ? '#3a5a5a' : '#5a8a8a'} size={11} />
+                  {cfg.label}
+                </span>
                 <span className="text-[#3a5a4a]">{cfg.mineralCost}m {cfg.creditCost}c</span>
               </button>
             );
@@ -238,7 +243,10 @@ export default function SystemPanel() {
                     const cfg = GROUND_OP_CONFIG[op.type];
                     return (
                       <div key={op.id} className="flex items-center justify-between py-1 border-b border-[#0a1020] font-mono text-[10px]">
-                        <span className="text-[#6a8a6a]">{cfg.icon} {cfg.label}</span>
+                        <span className="flex items-center gap-1.5 text-[#6a8a6a]">
+                          <PixelIcon id={cfg.icon} color="#5a8a6a" size={11} />
+                          {cfg.label}
+                        </span>
                         <div className="flex items-center gap-2">
                           <span className={op.active ? 'text-[#44aa44]' : 'text-[#aa8800]'}>
                             {op.active ? 'ACTIVE' : `${Math.max(0, op.buildCompletedTick - (currentGame?.tick ?? 0))}t`}

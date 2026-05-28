@@ -646,18 +646,24 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
     const gameRef = doc(db, 'games', currentGame.id);
 
+    let tickAdvanced = false;
+    let actualNewTick = 0;
+
     try {
       await runTransaction(db, async (tx) => {
         const snap = await tx.get(gameRef);
         const g = snap.data() as GameMeta;
         if (now - g.lastTickTime < GAME_TICK_MS) return;
 
-        const newTick = g.tick + 1;
-        tx.update(gameRef, { tick: newTick, lastTickTime: now });
+        actualNewTick = g.tick + 1;
+        tx.update(gameRef, { tick: actualNewTick, lastTickTime: now });
+        tickAdvanced = true;
       });
     } catch { return; }
 
-    const newTick = currentGame.tick + 1;
+    if (!tickAdvanced) return;
+
+    const newTick = actualNewTick;
 
     for (const empire of empires) {
       const updates = applyTick(empire, newTick);
@@ -674,9 +680,9 @@ export const useGameStore = create<GameStore>((set, get) => ({
         }
       }
 
-      // Claim systems for stations that just finished building this tick
+      // Claim systems for stations whose build timer has completed (and haven't been claimed yet)
       const newlyBuiltStations = empire.stations.filter(
-        s => s.buildCompletedTick === newTick
+        s => s.buildCompletedTick <= newTick && !empire.controlledSystems.includes(s.systemId)
       );
       if (newlyBuiltStations.length > 0) {
         const newControlled = Array.from(new Set([

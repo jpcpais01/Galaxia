@@ -1,18 +1,58 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
-  <rect width="512" height="512" fill="#00000f"/>
-  <circle cx="256" cy="256" r="194.56" fill="none" stroke="#00ffff" stroke-width="7.68" opacity="0.3"/>
-  <circle cx="256" cy="256" r="112.64" fill="none" stroke="#00ffff" stroke-width="5.12" opacity="0.2"/>
-  <circle cx="256" cy="256" r="40.96" fill="#ffe066"/>
-  <circle cx="256" cy="256" r="61.44" fill="#ff8800" opacity="0.4"/>
-  <circle cx="256" cy="256" r="92.16" fill="#ff440044"/>
-  <!-- Stars -->
-  <rect x="102.4" y="92.16" width="6.144" height="6.144" fill="#ffffff" opacity="0.9"/>
-  <rect x="384" y="112.64" width="6.144" height="6.144" fill="#ffffff" opacity="0.7"/>
-  <rect x="76.8" y="332.8" width="4.096" height="4.096" fill="#ffffff" opacity="0.8"/>
-  <rect x="409.6" y="358.4" width="5.12" height="5.12" fill="#ffffff" opacity="0.6"/>
-  <rect x="281.6" y="61.44" width="4.096" height="4.096" fill="#8888ff" opacity="0.9"/>
-  <rect x="450.56" y="215.04" width="4.096" height="4.096" fill="#ff8844" opacity="0.8"/>
-  <!-- Spiral arm hints -->
-  <path d="M 256 256 Q 358.4 153.6 435.2 256" stroke="#00ffff" stroke-width="2.56" fill="none" opacity="0.2"/>
-  <path d="M 256 256 Q 153.6 358.4 76.8 256" stroke="#00ffff" stroke-width="2.56" fill="none" opacity="0.2"/>
+<svg xmlns="http://www.w3.org/2000/svg" width="192" height="192" viewBox="0 0 192 192">
+  <!-- background -->
+  <rect width="192" height="192" fill="#00000f"/>
+
+  <!-- background pixel stars -->
+  <rect x="30"  y="25"  width="4" height="4" fill="#ffffff" opacity="0.80"/>
+  <rect x="150" y="27"  width="4" height="4" fill="#ffffff" opacity="0.55"/>
+  <rect x="23"  y="143" width="2" height="2" fill="#8888ff" opacity="0.90"/>
+  <rect x="162" y="154" width="4" height="4" fill="#ffffff" opacity="0.42"/>
+  <rect x="118" y="15"  width="2" height="2" fill="#ff8844" opacity="0.85"/>
+  <rect x="52"  y="168" width="2" height="2" fill="#ffffff" opacity="0.65"/>
+  <rect x="173" y="85"  width="2" height="2" fill="#c8dcff" opacity="0.55"/>
+
+  <!-- outer orbit ring -->
+  <circle cx="96" cy="96" r="78" fill="none" stroke="#00ffff" stroke-width="1.2" opacity="0.22"/>
+
+  <!-- inner orbit ring -->
+  <circle cx="96" cy="96" r="48" fill="none" stroke="#00ffff" stroke-width="1.2" opacity="0.40"/>
+
+  <!-- star glow (soft radial) -->
+  <radialGradient id="glow" cx="50%" cy="50%" r="50%">
+    <stop offset="0%"   stop-color="#ff6e00" stop-opacity="0.38"/>
+    <stop offset="100%" stop-color="#ff6e00" stop-opacity="0"/>
+  </radialGradient>
+  <circle cx="96" cy="96" r="36" fill="url(#glow)"/>
+
+  <!-- cross flares -->
+  <defs>
+    <linearGradient id="hflare" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%"   stop-color="#ffe066" stop-opacity="0"/>
+      <stop offset="40%"  stop-color="#ffe066" stop-opacity="0.85"/>
+      <stop offset="50%"  stop-color="#ffe066" stop-opacity="1"/>
+      <stop offset="60%"  stop-color="#ffe066" stop-opacity="0.85"/>
+      <stop offset="100%" stop-color="#ffe066" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="vflare" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%"   stop-color="#ffe066" stop-opacity="0"/>
+      <stop offset="40%"  stop-color="#ffe066" stop-opacity="0.85"/>
+      <stop offset="50%"  stop-color="#ffe066" stop-opacity="1"/>
+      <stop offset="60%"  stop-color="#ffe066" stop-opacity="0.85"/>
+      <stop offset="100%" stop-color="#ffe066" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+  <rect x="36" y="90" width="120" height="12" fill="url(#hflare)"/>
+  <rect x="90" y="36" width="12" height="120" fill="url(#vflare)"/>
+
+  <!-- star body (gold square) -->
+  <rect x="80" y="80" width="32" height="32" fill="#ffe066"/>
+
+  <!-- star core (white) -->
+  <rect x="87" y="87" width="18" height="18" fill="#ffffff"/>
+
+  <!-- planet 1 — blue, top of outer ring -->
+  <circle cx="96" cy="18" r="9" fill="#4488ff"/>
+
+  <!-- planet 2 — teal, right of inner ring -->
+  <circle cx="144" cy="96" r="7" fill="#44DDa0"/>
 </svg>

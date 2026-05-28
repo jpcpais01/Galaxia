@@ -43,13 +43,17 @@ export default function SystemCanvas() {
     ctx.fillStyle = '#00000a';
     ctx.fillRect(0, 0, W, H);
 
-    // Subtle starfield
-    const starSeed = system.stars[0].id.charCodeAt(6) * 1234;
-    for (let i = 0; i < 80; i++) {
-      const sx = ((starSeed * (i + 1) * 127) % W);
-      const sy = ((starSeed * (i + 1) * 311) % H);
+    // Subtle starfield — seeded PRNG so positions are random but stable per system
+    let rngState = system.id.split('').reduce((acc, c, i) => acc + c.charCodeAt(0) * (i + 1), 0) ^ 0xDEADBEEF;
+    const rng = () => {
+      rngState = (Math.imul(rngState ^ (rngState >>> 17), 0x45d9f3b) + 1013904223) | 0;
+      return (rngState >>> 0) / 0x100000000;
+    };
+    for (let i = 0; i < 140; i++) {
+      const sx = rng() * W;
+      const sy = rng() * H;
       ctx.fillStyle = '#ffffff';
-      ctx.globalAlpha = 0.15 + ((starSeed * i) % 100) / 300;
+      ctx.globalAlpha = 0.06 + rng() * 0.22;
       ctx.fillRect(Math.round(sx), Math.round(sy), 1, 1);
     }
     ctx.globalAlpha = 1;
@@ -278,7 +282,7 @@ export default function SystemCanvas() {
         ← GALAXY
       </button>
       {system && (
-        <div className="absolute top-3 left-24 font-pixel text-[10px] text-accent-cyan glow-text-cyan">
+        <div className="absolute top-3 left-1/2 -translate-x-1/2 font-pixel text-[10px] text-accent-cyan glow-text-cyan pointer-events-none whitespace-nowrap">
           {system.name}
         </div>
       )}

@@ -3,16 +3,17 @@ import { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { useGameStore } from '@/store/game-store';
 import { INFRA_CONFIG, GROUND_OP_CONFIG } from '@/lib/game/constants';
+import { PixelIcon } from '@/components/ui/PixelIcon';
 import type { Resources } from '@/types/game';
 
 const RESOURCES = [
-  { key: 'energy',     icon: '⚡', label: 'NRG',  color: '#ffee44' },
-  { key: 'food',       icon: '🌿', label: 'FOOD', color: '#44ff88' },
-  { key: 'minerals',   icon: '⛏',  label: 'MIN',  color: '#aabb88' },
-  { key: 'research',   icon: '🔬', label: 'RES',  color: '#8888ff' },
-  { key: 'compute',    icon: '💻', label: 'CPU',  color: '#aa44ff' },
-  { key: 'credits',    icon: '💱', label: 'CRD',  color: '#ffd700' },
-  { key: 'population', icon: '👥', label: 'POP',  color: '#ff8844' },
+  { key: 'energy',     icon: 'res_energy',     label: 'NRG',  color: '#ffee44' },
+  { key: 'food',       icon: 'res_food',       label: 'FOOD', color: '#44ff88' },
+  { key: 'minerals',   icon: 'res_minerals',   label: 'MIN',  color: '#aabb88' },
+  { key: 'research',   icon: 'res_research',   label: 'RES',  color: '#8888ff' },
+  { key: 'compute',    icon: 'res_compute',    label: 'CPU',  color: '#aa44ff' },
+  { key: 'credits',    icon: 'res_credits',    label: 'CRD',  color: '#ffd700' },
+  { key: 'population', icon: 'res_population', label: 'POP',  color: '#ff8844' },
 ] as const;
 
 const BASE: Partial<Record<keyof Resources, number>> = {
@@ -105,7 +106,7 @@ export default function ResourceBar() {
               }}
               onMouseLeave={() => setTooltip(null)}
             >
-              <span className="text-xs">{r.icon}</span>
+              <PixelIcon id={r.icon} color={r.color} size={12} />
               <span className="font-pixel text-[8px]" style={{ color: low ? '#ff4455' : r.color }}>
                 {fmt(val)}
               </span>

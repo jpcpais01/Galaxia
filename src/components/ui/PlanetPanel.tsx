@@ -4,12 +4,13 @@ import { useGameStore } from '@/store/game-store';
 import { PLANET_CONFIG, INFRA_CONFIG, GROUND_OP_CONFIG } from '@/lib/game/constants';
 import { renderPlanetSync, getPlanetBitmap } from '@/lib/game/planet-renderer';
 import { countUsedSlots } from '@/lib/game/economy';
+import { PixelIcon } from '@/components/ui/PixelIcon';
 import type { InfraType, GroundOpType } from '@/types/game';
 
-const GROUND_OP_LIST: { type: GroundOpType; label: string; icon: string }[] = [
-  { type: 'mineral_extractor',     label: 'Mineral Extractor',  icon: '⛏' },
-  { type: 'atmospheric_processor', label: 'Atmo Processor',     icon: '🌫' },
-  { type: 'deep_scanner',          label: 'Deep Scanner',       icon: '📡' },
+const GROUND_OP_LIST: { type: GroundOpType; label: string }[] = [
+  { type: 'mineral_extractor',     label: 'Mineral Extractor'  },
+  { type: 'atmospheric_processor', label: 'Atmo Processor'     },
+  { type: 'deep_scanner',          label: 'Deep Scanner'       },
 ];
 
 function PlanetDisplay({ type, seed, size }: { type: string; seed: number; size: number }) {
@@ -79,7 +80,12 @@ export default function PlanetPanel() {
             <div className="text-[#5a7a8a]">Size: <span className="text-[#8aa0b0]">{planet.size}</span></div>
             <div className="text-[#5a7a8a]">Moons: <span className="text-[#8aa0b0]">{planet.moons.length}</span></div>
             <div className="text-[#5a7a8a]">Sim: <span className="text-[#8aa0b0]">{planet.similarity}%</span></div>
-            {planet.hasResources && <div className="text-[#ffaa00] text-[9px]">⛏ NATURAL RESOURCES</div>}
+            {planet.hasResources && (
+              <div className="flex items-center gap-1 text-[#ffaa00] text-[9px]">
+                <PixelIcon id="mineral_extractor" color="#ffaa00" size={10} />
+                NATURAL RESOURCES
+              </div>
+            )}
             {planet.hasAnomaly && (
               <div className="text-[#ff8800] text-[9px]">
                 {planet.anomalyRevealed ? `★ ${planet.anomalyType?.replace('_', ' ').toUpperCase()}` : '★ ANOMALY DETECTED'}
@@ -136,7 +142,10 @@ export default function PlanetPanel() {
                 const icfg = INFRA_CONFIG[infra.type];
                 return (
                   <div key={infra.id} className="flex items-center justify-between py-1 border-b border-[#0a1020] font-mono text-[10px]">
-                    <span className="text-[#6a8a6a]">{icfg.icon} {icfg.label}</span>
+                    <span className="flex items-center gap-1.5 text-[#6a8a6a]">
+                      <PixelIcon id={icfg.icon} color="#5a8a6a" size={11} />
+                      {icfg.label}
+                    </span>
                     <div className="flex items-center gap-2">
                       <span className={infra.active ? 'text-[#44aa44]' : 'text-[#aa8800]'}>
                         {infra.active ? 'ACTIVE' : `${Math.max(0, infra.buildCompletedTick - tick)}t`}
@@ -170,7 +179,10 @@ export default function PlanetPanel() {
               const gcfg = GROUND_OP_CONFIG[op.type];
               return (
                 <div key={op.id} className="flex items-center justify-between py-1 border-b border-[#0a1020] font-mono text-[10px]">
-                  <span className="text-[#6a8a8a]">{gcfg.icon} {gcfg.label}</span>
+                  <span className="flex items-center gap-1.5 text-[#6a8a8a]">
+                    <PixelIcon id={gcfg.icon} color="#5a8a8a" size={11} />
+                    {gcfg.label}
+                  </span>
                   <div className="flex items-center gap-2">
                     <span className={op.active ? 'text-[#44aaaa]' : 'text-[#aa8800]'}>
                       {op.active ? 'ACTIVE' : `${Math.max(0, op.buildCompletedTick - tick)}t`}
@@ -187,7 +199,7 @@ export default function PlanetPanel() {
 
             {/* Build new ops */}
             <div className="mt-1 flex flex-col gap-1">
-              {GROUND_OP_LIST.map(({ type, icon }) => {
+              {GROUND_OP_LIST.map(({ type }) => {
                 const gcfg    = GROUND_OP_CONFIG[type];
                 const already = myGroundOps.some(g => g.type === type);
                 const canAfford = (myEmpire?.resources.minerals ?? 0) >= gcfg.mineralCost &&
@@ -199,9 +211,14 @@ export default function PlanetPanel() {
                     disabled={already || !canAfford}
                     className="flex items-center justify-between px-2 py-1.5 border border-[#1a1a2a] bg-[#05050f] hover:border-[#2a3a3a] disabled:opacity-40 disabled:cursor-not-allowed font-mono text-[9px]"
                   >
-                    <div className="text-left">
-                      <span className="text-[#6a8a8a]">{icon} {gcfg.label}</span>
-                      <div className="text-[#3a5a5a] text-[8px]">{gcfg.description}</div>
+                    <div className="flex items-start gap-2 text-left">
+                      <div className="mt-0.5 flex-shrink-0">
+                        <PixelIcon id={gcfg.icon} color={already || !canAfford ? '#3a5a5a' : '#6a9a9a'} size={12} />
+                      </div>
+                      <div>
+                        <span className="text-[#6a8a8a]">{gcfg.label}</span>
+                        <div className="text-[#3a5a5a] text-[8px]">{gcfg.description}</div>
+                      </div>
                     </div>
                     <div className="text-right text-[#3a5a4a] flex-shrink-0 ml-2">
                       <div>{gcfg.mineralCost}m</div>
@@ -231,7 +248,7 @@ export default function PlanetPanel() {
                   >
                     <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: moonCfg.groundColor }} />
                     <span className="flex-1">{moon.name}</span>
-                    {moon.hasResources && <span className="text-[#ffaa00] text-[9px]">⛏</span>}
+                    {moon.hasResources && <PixelIcon id="mineral_extractor" color="#ffaa00" size={10} />}
                     {moonOps.length > 0 && <span className="text-[#44aaaa] text-[9px]">●</span>}
                     <span className="text-[#2a3a4a] text-[9px]">{expanded ? '▲' : '▼'}</span>
                   </button>
@@ -251,7 +268,7 @@ export default function PlanetPanel() {
                       {controlled && moon.hasResources && (
                         <div className="mt-1 border-t border-[#0a0a1a] pt-1">
                           <div className="font-pixel text-[7px] text-[#3a5a6a] mb-1">GROUND OPS</div>
-                          {GROUND_OP_LIST.map(({ type, icon }) => {
+                          {GROUND_OP_LIST.map(({ type }) => {
                             const gcfg    = GROUND_OP_CONFIG[type];
                             const existing = moonOps.find(g => g.type === type);
                             const canAfford = (myEmpire?.resources.minerals ?? 0) >= gcfg.mineralCost &&
@@ -259,7 +276,10 @@ export default function PlanetPanel() {
                             if (existing) {
                               return (
                                 <div key={type} className="flex justify-between items-center py-0.5">
-                                  <span className="text-[#4a6a6a]">{icon} {gcfg.label}</span>
+                                  <span className="flex items-center gap-1.5 text-[#4a6a6a]">
+                                    <PixelIcon id={gcfg.icon} color="#4a7a7a" size={10} />
+                                    {gcfg.label}
+                                  </span>
                                   <div className="flex items-center gap-1">
                                     <span className={existing.active ? 'text-[#44aaaa]' : 'text-[#aa8800]'}>
                                       {existing.active ? 'ACTIVE' : `${Math.max(0, existing.buildCompletedTick - tick)}t`}
@@ -277,9 +297,12 @@ export default function PlanetPanel() {
                                 key={type}
                                 onClick={() => buildGroundOp(ui.selectedSystemId!, moon.id, type)}
                                 disabled={!canAfford}
-                                className="w-full flex justify-between py-0.5 disabled:opacity-40 disabled:cursor-not-allowed hover:text-[#6a9a9a]"
+                                className="w-full flex justify-between items-center py-0.5 disabled:opacity-40 disabled:cursor-not-allowed hover:text-[#6a9a9a]"
                               >
-                                <span className="text-[#3a5a5a]">{icon} {gcfg.label}</span>
+                                <span className="flex items-center gap-1.5 text-[#3a5a5a]">
+                                  <PixelIcon id={gcfg.icon} color={canAfford ? '#4a7a7a' : '#3a5a5a'} size={10} />
+                                  {gcfg.label}
+                                </span>
                                 <span className="text-[#2a4a4a]">{gcfg.mineralCost}m {gcfg.creditCost}c</span>
                               </button>
                             );
