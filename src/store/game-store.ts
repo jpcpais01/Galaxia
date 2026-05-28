@@ -101,10 +101,12 @@ export const useGameStore = create<GameStore>((set, get) => ({
       createdBy: hostPlayerId, createdByUsername: hostUsername,
       createdAt: Date.now(), maxPlayers, botCount,
       currentPlayers: 1, tick: 0, lastTickTime: Date.now(),
-      galaxy, systemStates, assembly: [],
+      seed, galaxy, systemStates, assembly: [],
     };
 
-    await setDoc(doc(db, 'games', gameId), game);
+    // Strip galaxy — clients regenerate it from seed; only store lightweight metadata
+    const { galaxy: _g, ...gameDoc } = game;
+    await setDoc(doc(db, 'games', gameId), gameDoc);
 
     // Create host empire
     const homeId = findHomeSystem(galaxy, 0);
@@ -175,7 +177,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
   startGame: async (gameId) => {
     const snap = await getDoc(doc(db, 'games', gameId));
-    const game = snap.data() as GameMeta;
+    const rawGame = snap.data() as Omit<GameMeta, 'galaxy'> & { seed: number };
+    const game: GameMeta = { ...rawGame, galaxy: generateGalaxy(rawGame.seed) };
     const empireSnap = await getDocs(collection(db, 'games', gameId, 'empires'));
     const existingCount = empireSnap.size;
 
@@ -198,9 +201,15 @@ export const useGameStore = create<GameStore>((set, get) => ({
   subscribeToGame: (gameId, playerId) => {
     const unsubs: (() => void)[] = [];
 
+    let cachedGalaxy: import('@/types/game').GalaxyData | null = null;
     const gameSub = onSnapshot(doc(db, 'games', gameId), snap => {
       if (!snap.exists()) return;
-      set({ currentGame: snap.data() as GameMeta });
+      const raw = snap.data() as Omit<GameMeta, 'galaxy'> & { seed: number };
+      // Generate galaxy once and reuse — it never changes
+      if (!cachedGalaxy || cachedGalaxy.seed !== raw.seed) {
+        cachedGalaxy = generateGalaxy(raw.seed);
+      }
+      set({ currentGame: { ...raw, galaxy: cachedGalaxy } });
     });
     unsubs.push(gameSub);
 

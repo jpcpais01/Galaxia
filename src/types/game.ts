@@ -275,7 +275,8 @@ export interface GameMeta {
   tick: number;
   lastTickTime: number;
   winnerId?: string;
-  galaxy: GalaxyData;
+  seed: number;
+  galaxy: GalaxyData; // never stored in Firestore — regenerated locally from seed
   systemStates: Record<string, SystemState>;
   assembly: AssemblyVote[];
   hostEmpireId?: string;
