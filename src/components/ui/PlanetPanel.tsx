@@ -39,7 +39,7 @@ function PlanetDisplay({ type, seed, size }: { type: string; seed: number; size:
 }
 
 export default function PlanetPanel() {
-  const { currentGame, myEmpire, ui, colonizePlanet, buildGroundOp, setPanel } = useGameStore();
+  const { currentGame, myEmpire, ui, colonizePlanet, buildGroundOp, destroyInfra, destroyGroundOp, setPanel } = useGameStore();
   const [expandedMoon, setExpandedMoon] = useState<string | null>(null);
 
   const system = currentGame?.galaxy.systems.find(s => s.id === ui.selectedSystemId);
@@ -137,9 +137,16 @@ export default function PlanetPanel() {
                 return (
                   <div key={infra.id} className="flex items-center justify-between py-1 border-b border-[#0a1020] font-mono text-[10px]">
                     <span className="text-[#6a8a6a]">{icfg.icon} {icfg.label}</span>
-                    <span className={infra.active ? 'text-[#44aa44]' : 'text-[#aa8800]'}>
-                      {infra.active ? 'ACTIVE' : `${Math.max(0, infra.buildCompletedTick - tick)}t`}
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <span className={infra.active ? 'text-[#44aa44]' : 'text-[#aa8800]'}>
+                        {infra.active ? 'ACTIVE' : `${Math.max(0, infra.buildCompletedTick - tick)}t`}
+                      </span>
+                      <button
+                        onClick={() => destroyInfra(infra.id)}
+                        className="font-pixel text-[7px] px-1 py-0.5 border border-[#3a1a1a] text-[#6a2a2a] hover:text-[#ff4455] hover:border-[#ff4455] transition-colors"
+                        title="Demolish"
+                      >✕</button>
+                    </div>
                   </div>
                 );
               })}
@@ -153,8 +160,8 @@ export default function PlanetPanel() {
           </>
         )}
 
-        {/* Ground Operations (available on controlled systems, no colonization needed) */}
-        {controlled && (
+        {/* Ground Operations — only on planets with natural resources */}
+        {controlled && planet.hasResources && (
           <div>
             <div className="font-pixel text-[8px] text-[#3a5a6a] mb-2">GROUND OPERATIONS</div>
 
@@ -164,9 +171,16 @@ export default function PlanetPanel() {
               return (
                 <div key={op.id} className="flex items-center justify-between py-1 border-b border-[#0a1020] font-mono text-[10px]">
                   <span className="text-[#6a8a8a]">{gcfg.icon} {gcfg.label}</span>
-                  <span className={op.active ? 'text-[#44aaaa]' : 'text-[#aa8800]'}>
-                    {op.active ? 'ACTIVE' : `${Math.max(0, op.buildCompletedTick - tick)}t`}
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <span className={op.active ? 'text-[#44aaaa]' : 'text-[#aa8800]'}>
+                      {op.active ? 'ACTIVE' : `${Math.max(0, op.buildCompletedTick - tick)}t`}
+                    </span>
+                    <button
+                      onClick={() => destroyGroundOp(op.id)}
+                      className="font-pixel text-[7px] px-1 py-0.5 border border-[#3a1a1a] text-[#6a2a2a] hover:text-[#ff4455] hover:border-[#ff4455] transition-colors"
+                      title="Dismantle"
+                    >✕</button>
+                  </div>
                 </div>
               );
             })}
@@ -233,8 +247,8 @@ export default function PlanetPanel() {
                           {moon.hasResources ? 'PRESENT' : 'NONE'}
                         </span>
                       </div>
-                      {/* Ground ops on moon */}
-                      {controlled && (
+                      {/* Ground ops on moon — only if has resources */}
+                      {controlled && moon.hasResources && (
                         <div className="mt-1 border-t border-[#0a0a1a] pt-1">
                           <div className="font-pixel text-[7px] text-[#3a5a6a] mb-1">GROUND OPS</div>
                           {GROUND_OP_LIST.map(({ type, icon }) => {
@@ -244,11 +258,17 @@ export default function PlanetPanel() {
                                               (myEmpire?.resources.credits  ?? 0) >= gcfg.creditCost;
                             if (existing) {
                               return (
-                                <div key={type} className="flex justify-between py-0.5">
+                                <div key={type} className="flex justify-between items-center py-0.5">
                                   <span className="text-[#4a6a6a]">{icon} {gcfg.label}</span>
-                                  <span className={existing.active ? 'text-[#44aaaa]' : 'text-[#aa8800]'}>
-                                    {existing.active ? 'ACTIVE' : `${Math.max(0, existing.buildCompletedTick - tick)}t`}
-                                  </span>
+                                  <div className="flex items-center gap-1">
+                                    <span className={existing.active ? 'text-[#44aaaa]' : 'text-[#aa8800]'}>
+                                      {existing.active ? 'ACTIVE' : `${Math.max(0, existing.buildCompletedTick - tick)}t`}
+                                    </span>
+                                    <button
+                                      onClick={() => destroyGroundOp(existing.id)}
+                                      className="font-pixel text-[7px] px-1 py-0.5 border border-[#3a1a1a] text-[#6a2a2a] hover:text-[#ff4455] hover:border-[#ff4455] transition-colors"
+                                    >✕</button>
+                                  </div>
                                 </div>
                               );
                             }

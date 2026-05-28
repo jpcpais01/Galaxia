@@ -35,10 +35,12 @@ export function computeResourceRates(empire: Empire, currentTick = 0): Resources
     }
   }
 
-  // Population consumes food, energy
+  // Population: consumes food & energy, produces credits & research
   const pop = empire.resources.population;
-  rates.food   -= Math.ceil(pop * 0.5);
-  rates.energy -= Math.ceil(pop * 0.2);
+  rates.food     -= Math.ceil(pop * 0.5);
+  rates.energy   -= Math.ceil(pop * 0.2);
+  rates.credits  += Math.floor(pop * 0.5);
+  rates.research += Math.floor(pop / 3);
 
   // Stations that have completed building
   for (const station of empire.stations) {
@@ -82,6 +84,15 @@ export function applyTick(empire: Empire, currentTick: number): Partial<Empire> 
   for (const key of Object.keys(rates) as (keyof Resources)[]) {
     newResources[key] = Math.max(0, (newResources[key] || 0) + rates[key]);
   }
+
+  // Colony Hub first-activation bonus: +10 pop one-time
+  let hubBonus = 0;
+  for (const infra of empire.infrastructure) {
+    if (infra.type === 'colony_hub' && !infra.active && infra.buildCompletedTick <= currentTick) {
+      hubBonus += 10;
+    }
+  }
+  if (hubBonus > 0) newResources.population += hubBonus;
 
   // Famine: if food goes negative, population declines
   if (newResources.food <= 0) {

@@ -79,7 +79,7 @@ export const INFRA_CONFIG: Record<InfraType, {
   research_lab:    { label: 'Research Lab',    slots: 1, buildTicks: 15, mineralCost: 100, energyCost: 20, creditCost: 80,  output: { research: 12 },    icon: '🔬' },
   ai_datacenter:   { label: 'AI Datacenter',   slots: 3, buildTicks: 30, mineralCost: 300, energyCost: 50, creditCost: 200, output: { compute: 25 },     icon: '💻' },
   trade_hub:       { label: 'Trade Hub',       slots: 1, buildTicks: 10, mineralCost: 80,  energyCost: 10, creditCost: 60,  output: { credits: 24 },     icon: '💱' },
-  colony_hub:      { label: 'Colony Hub',      slots: 2, buildTicks: 20, mineralCost: 150, energyCost: 20, creditCost: 100, output: { population: 6 },   icon: '🏛' },
+  colony_hub:      { label: 'Colony Hub',      slots: 2, buildTicks: 20, mineralCost: 150, energyCost: 20, creditCost: 100, output: { population: 2 },   icon: '🏛' },
   defense_battery: { label: 'Defense Battery', slots: 2, buildTicks: 25, mineralCost: 200, energyCost: 30, creditCost: 150, output: {},                  icon: '🛡' },
   shipyard:        { label: 'Shipyard',        slots: 4, buildTicks: 50, mineralCost: 500, energyCost: 80, creditCost: 300, output: {},                  icon: '🚀' },
 };

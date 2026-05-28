@@ -271,34 +271,8 @@ export default function GalaxyCanvas() {
       const px      = Math.round(sx);
       const py      = Math.round(sy);
 
-      /* Unknown (undiscovered) system — dim dot, clearly visible */
-      if (!surv && !owner) {
-        const flicker = 0.28 + Math.sin(t / 2400 + sys.x * 0.011 + sys.y * 0.008) * 0.08;
-        const dotR    = Math.max(2, Math.round(baseR * 0.55));
-        // Soft glow around unknown star
-        const uGlow = ctx.createRadialGradient(px, py, 0, px, py, dotR * 3);
-        uGlow.addColorStop(0,   '#3a4a8844');
-        uGlow.addColorStop(1,   'transparent');
-        ctx.globalAlpha = flicker * 0.6;
-        ctx.fillStyle = uGlow;
-        ctx.beginPath();
-        ctx.arc(px, py, dotR * 3, 0, Math.PI * 2);
-        ctx.fill();
-        // Pixel dot
-        ctx.globalAlpha = flicker;
-        ctx.fillStyle   = '#4a5a8a';
-        ctx.fillRect(px - dotR, py - dotR, dotR * 2, dotR * 2);
-        ctx.globalAlpha = 1;
-        if (isHov) {
-          ctx.globalAlpha = 0.45;
-          ctx.fillStyle   = '#8899bb';
-          ctx.font        = `${Math.max(8, 9 * Z)}px 'Share Tech Mono'`;
-          ctx.textAlign   = 'center';
-          ctx.fillText('???', sx, sy + baseR + 14);
-          ctx.globalAlpha = 1;
-        }
-        continue;
-      }
+      // Undiscovered systems render at 20% opacity — same visuals, just faded
+      const AS = (!surv && !owner) ? 0.2 : 1.0;
 
       /* Outer star glow (soft radial) */
       const glowR = baseR * 4.2;
@@ -307,19 +281,19 @@ export default function GalaxyCanvas() {
       glow.addColorStop(0.2, starCfg.glowColor + '55');
       glow.addColorStop(0.6, starCfg.glowColor + '18');
       glow.addColorStop(1,   'transparent');
-      ctx.globalAlpha = 0.9;
+      ctx.globalAlpha = 0.9 * AS;
       ctx.fillStyle = glow;
       ctx.beginPath();
       ctx.arc(px, py, glowR, 0, Math.PI * 2);
       ctx.fill();
-      ctx.globalAlpha = 1;
+      ctx.globalAlpha = AS;
 
       /* Hexagonal territory ring (owned) */
       if (owner && Z > 0.42) {
         const hexR = Math.round(baseR * 4);
         ctx.strokeStyle = owner.color;
         ctx.lineWidth   = 1;
-        ctx.globalAlpha = 0.24;
+        ctx.globalAlpha = 0.24 * AS;
         ctx.setLineDash([2, 3]);
         ctx.beginPath();
         for (let i = 0; i < 6; i++) {
@@ -331,7 +305,7 @@ export default function GalaxyCanvas() {
         ctx.closePath();
         ctx.stroke();
         ctx.setLineDash([]);
-        ctx.globalAlpha = 1;
+        ctx.globalAlpha = AS;
       }
 
       /* Owner colour band (glowing gradient ring) */
@@ -351,13 +325,13 @@ export default function GalaxyCanvas() {
       if (isHov && !isSel) {
         ctx.strokeStyle = '#ffffff';
         ctx.lineWidth   = 1;
-        ctx.globalAlpha = 0.22;
+        ctx.globalAlpha = 0.22 * AS;
         ctx.setLineDash([2, 3]);
         ctx.beginPath();
         ctx.arc(px, py, baseR * 3, 0, Math.PI * 2);
         ctx.stroke();
         ctx.setLineDash([]);
-        ctx.globalAlpha = 1;
+        ctx.globalAlpha = AS;
       }
 
       /* Selection corner brackets (animated pulse) */
@@ -367,7 +341,7 @@ export default function GalaxyCanvas() {
         const pul = 0.72 + Math.sin(t / 220) * 0.28;
         ctx.strokeStyle = '#00ffff';
         ctx.lineWidth   = 2;
-        ctx.globalAlpha = pul;
+        ctx.globalAlpha = pul * AS;
         ctx.setLineDash([]);
         // Top-left
         ctx.beginPath(); ctx.moveTo(px - s, py - s + len); ctx.lineTo(px - s, py - s); ctx.lineTo(px - s + len, py - s); ctx.stroke();
@@ -383,7 +357,7 @@ export default function GalaxyCanvas() {
         const scanAngle = (t / 1200) % (Math.PI * 2);
         ctx.strokeStyle = '#00ffff44';
         ctx.lineWidth   = 1;
-        ctx.globalAlpha = 0.5;
+        ctx.globalAlpha = 0.5 * AS;
         ctx.setLineDash([4, 8]);
         ctx.lineDashOffset = -((t / 40) % 12);
         ctx.beginPath();
@@ -391,7 +365,7 @@ export default function GalaxyCanvas() {
         ctx.stroke();
         ctx.lineDashOffset = 0;
         ctx.setLineDash([]);
-        ctx.globalAlpha = 1;
+        ctx.globalAlpha = AS;
       }
 
       /* ── Star body (normal or black hole) ── */
@@ -409,7 +383,7 @@ export default function GalaxyCanvas() {
         diskGlow.addColorStop(0.25, 'rgba(200,40,0,0.6)');
         diskGlow.addColorStop(0.55, 'rgba(120,10,0,0.3)');
         diskGlow.addColorStop(1,    'transparent');
-        ctx.globalAlpha = 0.85;
+        ctx.globalAlpha = 0.85 * AS;
         ctx.fillStyle = diskGlow;
         ctx.beginPath();
         ctx.ellipse(0, 0, diskR, diskR * 0.3, 0, 0, Math.PI * 2);
@@ -422,14 +396,14 @@ export default function GalaxyCanvas() {
         ring.addColorStop(0,   'rgba(255,100,30,0)');
         ring.addColorStop(0.45,'rgba(255,120,30,0.55)');
         ring.addColorStop(1,   'rgba(255,100,30,0)');
-        ctx.globalAlpha = 0.6;
+        ctx.globalAlpha = 0.6 * AS;
         ctx.fillStyle = ring;
         ctx.beginPath();
         ctx.arc(px, py, ringR + 4, 0, Math.PI * 2);
         ctx.fill();
 
         // Event horizon (dark circle — absorbs everything)
-        ctx.globalAlpha = 1;
+        ctx.globalAlpha = AS;
         ctx.fillStyle = '#000000';
         ctx.beginPath();
         ctx.arc(px, py, baseR * 1.1, 0, Math.PI * 2);
@@ -438,24 +412,24 @@ export default function GalaxyCanvas() {
         // Faint blue photon ring around horizon
         ctx.strokeStyle = '#4488ff';
         ctx.lineWidth   = 1;
-        ctx.globalAlpha = 0.35;
+        ctx.globalAlpha = 0.35 * AS;
         ctx.beginPath();
         ctx.arc(px, py, baseR * 1.25, 0, Math.PI * 2);
         ctx.stroke();
-        ctx.globalAlpha = 1;
+        ctx.globalAlpha = AS;
 
       } else {
         /* ─ Normal pixel-art star body ─ */
         const pr = Math.max(2, Math.round(baseR));
         ctx.fillStyle   = starCfg.color;
-        ctx.globalAlpha = 1;
+        ctx.globalAlpha = AS;
         ctx.fillRect(px - pr, py - pr, pr * 2, pr * 2);
 
         // 4-point pixel cross spikes
         if (baseR >= 3) {
           const sl = Math.round(pr * 2.6);
           const sw = Math.max(1, Math.round(pr * 0.38));
-          ctx.globalAlpha = 0.82;
+          ctx.globalAlpha = 0.82 * AS;
           ctx.fillRect(px - sl, py - sw, sl * 2, sw * 2);
           ctx.fillRect(px - sw, py - sl, sw * 2, sl * 2);
         }
@@ -463,7 +437,7 @@ export default function GalaxyCanvas() {
         // Diagonal secondary spikes
         if (baseR >= 5) {
           const dl = Math.round(pr * 1.6);
-          ctx.globalAlpha = 0.35;
+          ctx.globalAlpha = 0.35 * AS;
           ctx.fillRect(px - dl, py - dl, 2, 2);
           ctx.fillRect(px + dl - 1, py - dl, 2, 2);
           ctx.fillRect(px - dl, py + dl - 1, 2, 2);
@@ -472,25 +446,26 @@ export default function GalaxyCanvas() {
 
         // Bright hot centre pixel
         ctx.fillStyle   = '#ffffff';
-        ctx.globalAlpha = 0.95;
+        ctx.globalAlpha = 0.95 * AS;
         ctx.fillRect(px - 1, py - 1, 2, 2);
-        ctx.globalAlpha = 1;
+        ctx.globalAlpha = AS;
       }
 
       /* ── System label ── */
       if (Z > 0.44 || isSel || isHov) {
-        const fs = Math.max(8, Math.min(11, 9 * Z));
+        const fs    = Math.max(8, Math.min(11, 9 * Z));
+        const label = surv || owner ? sys.name : '???';
         ctx.font      = `${fs}px 'Share Tech Mono'`;
         ctx.textAlign = 'center';
         // Drop shadow
         ctx.fillStyle   = '#00000099';
-        ctx.globalAlpha = 0.65;
-        ctx.fillText(sys.name, sx + 1, sy + baseR + 16);
+        ctx.globalAlpha = 0.65 * AS;
+        ctx.fillText(label, sx + 1, sy + baseR + 16);
         // Main label
-        ctx.fillStyle   = isSel ? '#00ffff' : owner ? owner.color : '#7a9ab8';
-        ctx.globalAlpha = isSel ? 1 : 0.88;
-        ctx.fillText(sys.name, sx, sy + baseR + 15);
-        ctx.globalAlpha = 1;
+        ctx.fillStyle   = isSel ? '#00ffff' : owner ? owner.color : surv ? '#7a9ab8' : '#4a6a7a';
+        ctx.globalAlpha = (isSel ? 1 : 0.88) * AS;
+        ctx.fillText(label, sx, sy + baseR + 15);
+        ctx.globalAlpha = AS;
       }
 
       /* ── Planet count dots ── */
@@ -501,10 +476,10 @@ export default function GalaxyCanvas() {
           const dx = Math.round(sx - totalW / 2 + i * spacing);
           const dy = Math.round(sy + baseR + 6);
           ctx.fillStyle   = surv ? '#4a6a9a' : '#2a3855';
-          ctx.globalAlpha = 0.72;
+          ctx.globalAlpha = 0.72 * AS;
           ctx.fillRect(dx, dy, 2, 2);
         }
-        ctx.globalAlpha = 1;
+        ctx.globalAlpha = AS;
       }
 
       /* ── Station pixel icon (small satellite shape) ── */
@@ -513,7 +488,7 @@ export default function GalaxyCanvas() {
         const iy  = py - baseR - 5;
         const col = owner?.color ?? '#88aaff';
         ctx.fillStyle   = col;
-        ctx.globalAlpha = 0.88;
+        ctx.globalAlpha = 0.88 * AS;
         // 5-pixel diamond
         ctx.fillRect(ix,     iy - 2, 1, 1);
         ctx.fillRect(ix - 1, iy - 1, 3, 1);
@@ -523,8 +498,9 @@ export default function GalaxyCanvas() {
         // Tiny horizontal antenna arms
         ctx.fillRect(ix - 3, iy, 1, 1);
         ctx.fillRect(ix + 3, iy, 1, 1);
-        ctx.globalAlpha = 1;
       }
+      // Always reset alpha after each star system
+      ctx.globalAlpha = 1;
     }
 
     /* ── 8. Screen-space vignette (corners/edges darken) ──────── */

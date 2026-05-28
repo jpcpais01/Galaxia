@@ -53,6 +53,8 @@ interface GameStore {
   startResearch:  (nodeId: string) => Promise<void>;
   buildShip:      (designId: string, systemId: string) => Promise<void>;
   buildGroundOp:  (systemId: string, targetId: string, type: GroundOpType) => Promise<void>;
+  destroyInfra:   (infraId: string) => Promise<void>;
+  destroyGroundOp: (opId: string) => Promise<void>;
   saveShipDesign: (design: Empire['shipDesigns'][0]) => Promise<void>;
   proposeDiplomacy: (targetEmpireId: string, status: string) => Promise<void>;
   acceptDiplomacy:  (targetEmpireId: string) => Promise<void>;
@@ -470,6 +472,24 @@ export const useGameStore = create<GameStore>((set, get) => ({
     await updateDoc(doc(db, 'games', currentGame.id, 'empires', myEmpire.id), {
       resources: newResources,
       groundOps: [...(myEmpire.groundOps ?? []), groundOp],
+    });
+  },
+
+  destroyInfra: async (infraId) => {
+    const { currentGame, myEmpire } = get();
+    if (!currentGame || !myEmpire) return;
+    const updated = myEmpire.infrastructure.filter(i => i.id !== infraId);
+    await updateDoc(doc(db, 'games', currentGame.id, 'empires', myEmpire.id), {
+      infrastructure: updated,
+    });
+  },
+
+  destroyGroundOp: async (opId) => {
+    const { currentGame, myEmpire } = get();
+    if (!currentGame || !myEmpire) return;
+    const updated = (myEmpire.groundOps ?? []).filter(g => g.id !== opId);
+    await updateDoc(doc(db, 'games', currentGame.id, 'empires', myEmpire.id), {
+      groundOps: updated,
     });
   },
 

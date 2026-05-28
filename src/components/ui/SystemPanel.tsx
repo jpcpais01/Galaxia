@@ -12,7 +12,7 @@ const GROUND_OPS: { type: GroundOpType; label: string; icon: string }[] = [
 export default function SystemPanel() {
   const {
     currentGame, myEmpire, empires, ui,
-    setView, surveySystem, buildStation, buildGroundOp, selectPlanet,
+    setView, surveySystem, buildStation, buildGroundOp, destroyGroundOp, selectPlanet,
   } = useGameStore();
 
   const system = currentGame?.galaxy.systems.find(s => s.id === ui.selectedSystemId);
@@ -171,53 +171,90 @@ export default function SystemPanel() {
           </div>
         )}
 
-        {/* Ground Operations (controlled systems only) */}
-        {isMine && surveyed && system.planets.length > 0 && !system.isBlackHole && (
-          <div>
-            <div className="font-pixel text-[8px] text-[#3a5a6a] mb-2">GROUND OPERATIONS</div>
+        {/* Ground Operations (controlled systems only, on resource planets) */}
+        {isMine && surveyed && !system.isBlackHole && (() => {
+          const resourcePlanets = system.planets.filter(p => p.hasResources);
+          const resourceMoons   = system.planets.flatMap(p => p.moons.filter(m => m.hasResources));
+          const hasAnyResource  = resourcePlanets.length > 0 || resourceMoons.length > 0;
+          if (!hasAnyResource) return null;
+          return (
+            <div>
+              <div className="font-pixel text-[8px] text-[#3a5a6a] mb-2">GROUND OPERATIONS</div>
 
-            {/* Active/building ops */}
-            {myGroundOps.length > 0 && (
-              <div className="mb-2 flex flex-col gap-1">
-                {myGroundOps.map(op => {
-                  const cfg = GROUND_OP_CONFIG[op.type];
-                  return (
-                    <div key={op.id} className="flex items-center justify-between py-1 border-b border-[#0a1020] font-mono text-[10px]">
-                      <span className="text-[#6a8a6a]">{cfg.icon} {cfg.label}</span>
-                      <span className={op.active ? 'text-[#44aa44]' : 'text-[#aa8800]'}>
-                        {op.active ? 'ACTIVE' : `${Math.max(0, op.buildCompletedTick - (currentGame?.tick ?? 0))}t`}
-                      </span>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
+              {/* Active/building ops with destroy button */}
+              {myGroundOps.length > 0 && (
+                <div className="mb-2 flex flex-col gap-1">
+                  {myGroundOps.map(op => {
+                    const cfg = GROUND_OP_CONFIG[op.type];
+                    return (
+                      <div key={op.id} className="flex items-center justify-between py-1 border-b border-[#0a1020] font-mono text-[10px]">
+                        <span className="text-[#6a8a6a]">{cfg.icon} {cfg.label}</span>
+                        <div className="flex items-center gap-2">
+                          <span className={op.active ? 'text-[#44aa44]' : 'text-[#aa8800]'}>
+                            {op.active ? 'ACTIVE' : `${Math.max(0, op.buildCompletedTick - (currentGame?.tick ?? 0))}t`}
+                          </span>
+                          <button
+                            onClick={() => destroyGroundOp(op.id)}
+                            className="font-pixel text-[7px] px-1 py-0.5 border border-[#3a1a1a] text-[#6a2a2a] hover:text-[#ff4455] hover:border-[#ff4455] transition-colors"
+                            title="Dismantle"
+                          >✕</button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
 
-            {/* Build new op */}
-            {system.planets.length > 0 && (() => {
-              const firstPlanet = system.planets[0];
-              return GROUND_OPS.map(({ type, icon }) => {
-                const cfg = GROUND_OP_CONFIG[type];
-                const already = myGroundOps.some(g => g.targetId === firstPlanet.id && g.type === type);
-                const affordable = (myEmpire?.resources.minerals ?? 0) >= cfg.mineralCost &&
-                                   (myEmpire?.resources.credits  ?? 0) >= cfg.creditCost;
-                return (
-                  <button
-                    key={type}
-                    onClick={() => buildGroundOp(system.id, firstPlanet.id, type)}
-                    disabled={already || !affordable}
-                    className="w-full flex items-center justify-between px-2 py-1.5 border border-[#1a1a2a] bg-[#05050f] hover:border-[#2a3a3a] disabled:opacity-40 disabled:cursor-not-allowed mb-1 font-mono text-[9px]"
-                  >
-                    <span className="text-[#6a8a8a]">{icon} {cfg.label}</span>
-                    <span className="text-[#3a5a4a]">
-                      {cfg.mineralCost}m {cfg.creditCost}c
-                    </span>
-                  </button>
-                );
-              });
-            })()}
-          </div>
-        )}
+              {/* Build ops on each resource planet */}
+              {resourcePlanets.map(planet => (
+                <div key={planet.id} className="mb-2">
+                  <div className="font-pixel text-[7px] text-[#2a4a5a] mb-1">{planet.name}</div>
+                  {GROUND_OPS.map(({ type, icon }) => {
+                    const cfg = GROUND_OP_CONFIG[type];
+                    const already = myGroundOps.some(g => g.targetId === planet.id && g.type === type);
+                    const affordable = (myEmpire?.resources.minerals ?? 0) >= cfg.mineralCost &&
+                                       (myEmpire?.resources.credits  ?? 0) >= cfg.creditCost;
+                    return (
+                      <button
+                        key={type}
+                        onClick={() => buildGroundOp(system.id, planet.id, type)}
+                        disabled={already || !affordable}
+                        className="w-full flex items-center justify-between px-2 py-1 border border-[#1a1a2a] bg-[#05050f] hover:border-[#2a3a3a] disabled:opacity-40 disabled:cursor-not-allowed mb-0.5 font-mono text-[9px]"
+                      >
+                        <span className="text-[#6a8a8a]">{icon} {cfg.label}</span>
+                        <span className="text-[#3a5a4a]">{cfg.mineralCost}m {cfg.creditCost}c</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              ))}
+
+              {/* Build ops on resource moons */}
+              {resourceMoons.map(moon => (
+                <div key={moon.id} className="mb-2">
+                  <div className="font-pixel text-[7px] text-[#2a4a5a] mb-1">{moon.name} ◉</div>
+                  {GROUND_OPS.map(({ type, icon }) => {
+                    const cfg = GROUND_OP_CONFIG[type];
+                    const already = myGroundOps.some(g => g.targetId === moon.id && g.type === type);
+                    const affordable = (myEmpire?.resources.minerals ?? 0) >= cfg.mineralCost &&
+                                       (myEmpire?.resources.credits  ?? 0) >= cfg.creditCost;
+                    return (
+                      <button
+                        key={type}
+                        onClick={() => buildGroundOp(system.id, moon.id, type)}
+                        disabled={already || !affordable}
+                        className="w-full flex items-center justify-between px-2 py-1 border border-[#1a1a2a] bg-[#05050f] hover:border-[#2a3a3a] disabled:opacity-40 disabled:cursor-not-allowed mb-0.5 font-mono text-[9px]"
+                      >
+                        <span className="text-[#6a8a8a]">{icon} {cfg.label}</span>
+                        <span className="text-[#3a5a4a]">{cfg.mineralCost}m {cfg.creditCost}c</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              ))}
+            </div>
+          );
+        })()}
       </div>
     </div>
   );
