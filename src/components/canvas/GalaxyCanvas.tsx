@@ -9,18 +9,15 @@ import { SeededRandom } from '@/lib/noise';
 interface BgStar { x: number; y: number; r: number; a: number; phase: number; }
 interface Nebula  { x: number; y: number; rx: number; ry: number; rot: number; c1: string; c2: string; a: number; }
 
-/* ─── Galaxy world-space constants ───────────────────────────────── */
-const GCX = 1000; // galaxy center X  (GALAXY_WIDTH  / 2)
-const GCY = 1000; // galaxy center Y  (GALAXY_HEIGHT / 2)
-const GR  = 850;  // galaxy radius (Math.min(2000,2000)/2 - 150)
-
-/* ─── Scene generators (run once per galaxy seed) ────────────────── */
-function makeBgStars(seed: number, w: number, h: number): BgStar[][] {
+/* ─── Scene generators ───────────────────────────────────────────── */
+// Background stars use normalised [0,1] screen-space coordinates so they
+// always fill the entire canvas regardless of camera pan / zoom.
+function makeBgStars(seed: number): BgStar[][] {
   const rng = new SeededRandom(seed + 7777);
-  return [700, 140, 26].map((n, l) =>
+  return [800, 160, 30].map((n, l) =>
     Array.from({ length: n }, () => ({
-      x:     rng.range(0, w),
-      y:     rng.range(0, h),
+      x:     rng.range(0, 1),   // normalised screen-space
+      y:     rng.range(0, 1),
       r:     [0.5, 1, 2.5][l],
       a:     l === 0 ? rng.range(0.08, 0.35)
            : l === 1 ? rng.range(0.3,  0.65)
@@ -84,7 +81,7 @@ export default function GalaxyCanvas() {
   useEffect(() => {
     if (!currentGame) return;
     const { seed, width: W, height: H } = currentGame.galaxy;
-    bgRef.current  = makeBgStars(seed, W, H);
+    bgRef.current  = makeBgStars(seed);     // screen-space, no dimensions needed
     nebRef.current = makeNebulae(seed, W, H);
   }, [currentGame?.galaxy.seed]);
 
@@ -111,28 +108,7 @@ export default function GalaxyCanvas() {
     ctx.fillStyle = bg;
     ctx.fillRect(0, 0, CW, CH);
 
-    /* ── 2. Galaxy fade-out — seamless, no hard border ──────────── */
-    {
-      const { sx: gcx, sy: gcy } = w2s(GCX, GCY, CW, CH);
-      // Gradient starts from galaxy centre (r=0) so there is no
-      // visible inner edge — darkness increases so gradually that
-      // the circular boundary is invisible.
-      const rOuter = (GR + 700) * Z;
-      const fade = ctx.createRadialGradient(gcx, gcy, 0, gcx, gcy, rOuter);
-      fade.addColorStop(0,    'transparent');
-      fade.addColorStop(0.45, 'transparent');
-      fade.addColorStop(0.62, '#00000415');
-      fade.addColorStop(0.75, '#00000540');
-      fade.addColorStop(0.86, '#00000680');
-      fade.addColorStop(0.94, '#000007bb');
-      fade.addColorStop(1,    '#000008ee');
-      ctx.fillStyle = fade;
-      ctx.beginPath();
-      ctx.arc(gcx, gcy, rOuter, 0, Math.PI * 2);
-      ctx.fill();
-    }
-
-    /* ── 3. Nebulae (colourful elliptical clouds) ──────────────── */
+    /* ── 2. Nebulae (colourful elliptical clouds) ─────────────────── */
     for (const neb of nebRef.current) {
       const { sx, sy } = w2s(neb.x, neb.y, CW, CH);
       ctx.save();
@@ -154,12 +130,13 @@ export default function GalaxyCanvas() {
     }
     ctx.globalAlpha = 1;
 
-    /* ── 4. Three-layer starfield ──────────────────────────────── */
+    /* ── 3. Three-layer starfield (screen-space — always fills canvas) */
     const layerColors = ['#7788bb', '#99aadd', '#ffffff'];
     for (let l = 0; l < 3; l++) {
       for (const s of bgRef.current[l] ?? []) {
-        const { sx, sy } = w2s(s.x, s.y, CW, CH);
-        if (sx < -2 || sx > CW + 2 || sy < -2 || sy > CH + 2) continue;
+        // s.x / s.y are normalised [0,1] — scale to current canvas size
+        const sx = s.x * CW;
+        const sy = s.y * CH;
         const tw = l === 2 ? 0.5 + Math.sin(t / 850 + s.phase) * 0.5 : 1;
         ctx.globalAlpha = s.a * tw;
         ctx.fillStyle = layerColors[l];
@@ -269,19 +246,30 @@ export default function GalaxyCanvas() {
       const px      = Math.round(sx);
       const py      = Math.round(sy);
 
-      /* Unknown (undiscovered) system — subtle pixel flicker */
+      /* Unknown (undiscovered) system — dim dot, clearly visible */
       if (!surv && !owner) {
-        const fl = 0.07 + Math.sin(t / 2800 + sys.x * 0.011 + sys.y * 0.008) * 0.04;
-        ctx.globalAlpha = fl;
-        ctx.fillStyle   = '#3a4a88';
-        ctx.fillRect(px - 1, py - 1, 3, 3);
+        const flicker = 0.28 + Math.sin(t / 2400 + sys.x * 0.011 + sys.y * 0.008) * 0.08;
+        const dotR    = Math.max(2, Math.round(baseR * 0.55));
+        // Soft glow around unknown star
+        const uGlow = ctx.createRadialGradient(px, py, 0, px, py, dotR * 3);
+        uGlow.addColorStop(0,   '#3a4a8844');
+        uGlow.addColorStop(1,   'transparent');
+        ctx.globalAlpha = flicker * 0.6;
+        ctx.fillStyle = uGlow;
+        ctx.beginPath();
+        ctx.arc(px, py, dotR * 3, 0, Math.PI * 2);
+        ctx.fill();
+        // Pixel dot
+        ctx.globalAlpha = flicker;
+        ctx.fillStyle   = '#4a5a8a';
+        ctx.fillRect(px - dotR, py - dotR, dotR * 2, dotR * 2);
         ctx.globalAlpha = 1;
         if (isHov) {
-          ctx.globalAlpha = 0.3;
-          ctx.fillStyle   = '#6677aa';
+          ctx.globalAlpha = 0.45;
+          ctx.fillStyle   = '#8899bb';
           ctx.font        = `${Math.max(8, 9 * Z)}px 'Share Tech Mono'`;
           ctx.textAlign   = 'center';
-          ctx.fillText('???', sx, sy + 16);
+          ctx.fillText('???', sx, sy + baseR + 14);
           ctx.globalAlpha = 1;
         }
         continue;
