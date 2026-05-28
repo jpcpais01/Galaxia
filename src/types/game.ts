@@ -24,6 +24,12 @@ export type ShipTileType =
   | 'thruster' | 'hyperdrive'
   | 'sensor_array' | 'ecm' | 'repair_bay' | 'empty';
 
+export type OrbitalStructureType =
+  | 'orbital_shipyard' | 'defense_platform' | 'orbital_sensor' | 'supply_depot';
+
+export type FleetTaskType =
+  | 'move_system' | 'attack_fleet' | 'attack_station' | 'attack_planet';
+
 export type DiplomacyStatus = 'neutral' | 'allied' | 'at_war' | 'trade_partner' | 'non_aggression';
 
 export type AnomalyType =
@@ -162,6 +168,43 @@ export interface Ship {
   buildCompletedTick?: number;
 }
 
+export interface FleetTask {
+  type: FleetTaskType;
+  targetSystemId?: string;
+  targetFleetId?: string;
+  targetPlanetId?: string;
+  targetEmpireId?: string;
+}
+
+export interface Fleet {
+  id: string;
+  name: string;
+  empireId: string;
+  systemId: string;
+  posX: number;   // 0-1 normalized in system space
+  posY: number;
+  shipIds: string[];
+  state: 'idle' | 'moving' | 'in_transit' | 'fighting';
+  targetPosX?: number;
+  targetPosY?: number;
+  transitToSystemId?: string;
+  transitFromSystemId?: string;
+  transitProgress?: number;  // 0-1
+  task?: FleetTask;
+}
+
+export interface OrbitalStructure {
+  id: string;
+  type: OrbitalStructureType;
+  planetId: string;
+  systemId: string;
+  buildStartedTick: number;
+  buildCompletedTick: number;
+  active: boolean;
+  hp: number;
+  maxHp: number;
+}
+
 export interface ResearchNode {
   id: string;
   name: string;
@@ -238,6 +281,8 @@ export interface Empire {
   groundOps: GroundOp[];
   stations: Station[];
   ships: Ship[];
+  fleets: Fleet[];
+  orbitalStructures: OrbitalStructure[];
   shipDesigns: ShipDesign[];
   completedResearch: string[];
   researchQueue: string | null;
@@ -367,7 +412,8 @@ export interface UIState {
   view: GameView;
   selectedSystemId: string | null;
   selectedPlanetId: string | null;
-  activePanel: 'none' | 'build' | 'research' | 'ships' | 'diplomacy' | 'assembly' | 'designer' | 'colonies';
+  selectedFleetId: string | null;
+  activePanel: 'none' | 'build' | 'research' | 'ships' | 'diplomacy' | 'assembly' | 'designer' | 'colonies' | 'fleets';
   hoverSystemId: string | null;
   cameraX: number;
   cameraY: number;

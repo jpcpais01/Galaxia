@@ -1,4 +1,4 @@
-import type { PlanetType, StarType, InfraType, StationType, GroundOpType, Resources } from '@/types/game';
+import type { PlanetType, StarType, InfraType, StationType, GroundOpType, Resources, OrbitalStructureType } from '@/types/game';
 
 export const GAME_TICK_MS = 6000;
 export const BOT_THINK_EVERY_N_TICKS = 2;
@@ -91,12 +91,13 @@ export const STATION_CONFIG: Record<StationType, {
   energyCost: number;
   creditCost: number;
   icon: string;
+  hp: number;
 }> = {
-  space_station:    { label: 'Space Station',    buildTicks: 50, mineralCost: 300, energyCost: 0,  creditCost: 200, icon: '🛰' },
-  mining_station:   { label: 'Mining Station',   buildTicks: 20, mineralCost: 200, energyCost: 0,  creditCost: 100, icon: '⛏' },
-  military_outpost: { label: 'Military Outpost', buildTicks: 40, mineralCost: 400, energyCost: 40, creditCost: 250, icon: '🔫' },
-  research_station: { label: 'Research Station', buildTicks: 35, mineralCost: 350, energyCost: 30, creditCost: 200, icon: '🔭' },
-  stargate:         { label: 'Stargate',         buildTicks: 100, mineralCost: 1000, energyCost: 200, creditCost: 800, icon: '🌀' },
+  space_station:    { label: 'Space Station',    buildTicks: 50, mineralCost: 300, energyCost: 0,  creditCost: 200, icon: '🛰', hp: 500 },
+  mining_station:   { label: 'Mining Station',   buildTicks: 20, mineralCost: 200, energyCost: 0,  creditCost: 100, icon: '⛏', hp: 300 },
+  military_outpost: { label: 'Military Outpost', buildTicks: 40, mineralCost: 400, energyCost: 40, creditCost: 250, icon: '🔫', hp: 800 },
+  research_station: { label: 'Research Station', buildTicks: 35, mineralCost: 350, energyCost: 30, creditCost: 200, icon: '🔭', hp: 400 },
+  stargate:         { label: 'Stargate',         buildTicks: 100, mineralCost: 1000, energyCost: 200, creditCost: 800, icon: '🌀', hp: 1200 },
 };
 
 export const GROUND_OP_CONFIG: Record<GroundOpType, {
@@ -149,19 +150,32 @@ export const ANOMALY_EFFECTS: Record<string, string> = {
   void_rift:          'Access to Void Gate: teleport between two systems',
 };
 
-export const TILE_CONFIG: Record<string, { label: string; color: string; hp: number; attack: number; defense: number; speed: number }> = {
-  cockpit:          { label: 'Cockpit',        color: '#88AAFF', hp: 40,  attack: 0,  defense: 0,  speed: 0  },
-  crew_quarters:    { label: 'Crew Quarters',  color: '#6688AA', hp: 30,  attack: 0,  defense: 2,  speed: 0  },
-  cargo_hold:       { label: 'Cargo',          color: '#446688', hp: 25,  attack: 0,  defense: 0,  speed: 0  },
-  laser_cannon:     { label: 'Laser',          color: '#FF4444', hp: 20,  attack: 12, defense: 0,  speed: 0  },
-  missile_launcher: { label: 'Missiles',       color: '#FF8844', hp: 20,  attack: 18, defense: 0,  speed: 0  },
-  railgun:          { label: 'Railgun',        color: '#FFAA00', hp: 15,  attack: 25, defense: 0,  speed: 0  },
-  shield_generator: { label: 'Shield',         color: '#44AAFF', hp: 30,  attack: 0,  defense: 20, speed: 0  },
-  armor_plate:      { label: 'Armor',          color: '#8888AA', hp: 50,  attack: 0,  defense: 10, speed: 0  },
-  thruster:         { label: 'Thruster',       color: '#FF6600', hp: 25,  attack: 0,  defense: 0,  speed: 8  },
-  hyperdrive:       { label: 'Hyperdrive',     color: '#AA44FF', hp: 20,  attack: 0,  defense: 0,  speed: 15 },
-  sensor_array:     { label: 'Sensors',        color: '#44FFAA', hp: 20,  attack: 2,  defense: 0,  speed: 2  },
-  ecm:              { label: 'ECM',            color: '#AAFF44', hp: 15,  attack: 0,  defense: 5,  speed: 0  },
-  repair_bay:       { label: 'Repair Bay',     color: '#44FF44', hp: 25,  attack: 0,  defense: 8,  speed: 0  },
-  empty:            { label: 'Empty',          color: '#111122', hp: 0,   attack: 0,  defense: 0,  speed: 0  },
+export const TILE_CONFIG: Record<string, { label: string; color: string; hp: number; attack: number; defense: number; speed: number; icon: string }> = {
+  cockpit:          { label: 'Cockpit',        color: '#88AAFF', hp: 40,  attack: 0,  defense: 0,  speed: 0,  icon: 'tile_cockpit' },
+  crew_quarters:    { label: 'Crew Quarters',  color: '#6688AA', hp: 30,  attack: 0,  defense: 2,  speed: 0,  icon: 'tile_crew' },
+  cargo_hold:       { label: 'Cargo',          color: '#446688', hp: 25,  attack: 0,  defense: 0,  speed: 0,  icon: 'tile_cargo' },
+  laser_cannon:     { label: 'Laser',          color: '#FF4444', hp: 20,  attack: 12, defense: 0,  speed: 0,  icon: 'tile_laser' },
+  missile_launcher: { label: 'Missiles',       color: '#FF8844', hp: 20,  attack: 18, defense: 0,  speed: 0,  icon: 'tile_missile' },
+  railgun:          { label: 'Railgun',        color: '#FFAA00', hp: 15,  attack: 25, defense: 0,  speed: 0,  icon: 'tile_railgun' },
+  shield_generator: { label: 'Shield',         color: '#44AAFF', hp: 30,  attack: 0,  defense: 20, speed: 0,  icon: 'tile_shield' },
+  armor_plate:      { label: 'Armor',          color: '#8888AA', hp: 50,  attack: 0,  defense: 10, speed: 0,  icon: 'tile_armor' },
+  thruster:         { label: 'Thruster',       color: '#FF6600', hp: 25,  attack: 0,  defense: 0,  speed: 8,  icon: 'tile_thruster' },
+  hyperdrive:       { label: 'Hyperdrive',     color: '#AA44FF', hp: 20,  attack: 0,  defense: 0,  speed: 15, icon: 'tile_hyperdrive' },
+  sensor_array:     { label: 'Sensors',        color: '#44FFAA', hp: 20,  attack: 2,  defense: 0,  speed: 2,  icon: 'tile_sensor' },
+  ecm:              { label: 'ECM',            color: '#AAFF44', hp: 15,  attack: 0,  defense: 5,  speed: 0,  icon: 'tile_ecm' },
+  repair_bay:       { label: 'Repair Bay',     color: '#44FF44', hp: 25,  attack: 0,  defense: 8,  speed: 0,  icon: 'tile_repair' },
+  empty:            { label: 'Empty',          color: '#111122', hp: 0,   attack: 0,  defense: 0,  speed: 0,  icon: '' },
+};
+
+export const ORBITAL_CONFIG: Record<OrbitalStructureType, {
+  label: string; buildTicks: number;
+  mineralCost: number; energyCost: number; creditCost: number;
+  hp: number; defense: number; attack: number;
+  output: Partial<Resources>;
+  icon: string; description: string;
+}> = {
+  orbital_shipyard: { label: 'Orbital Shipyard', buildTicks: 30, mineralCost: 400, energyCost: 50, creditCost: 250, hp: 300, defense: 10, attack: 0,  output: {},                              icon: 'shipyard',        description: 'Constructs warships in orbit' },
+  defense_platform: { label: 'Defense Platform', buildTicks: 20, mineralCost: 300, energyCost: 30, creditCost: 150, hp: 400, defense: 30, attack: 25, output: {},                              icon: 'defense_battery', description: 'Orbital weapons platform' },
+  orbital_sensor:   { label: 'Sensor Array',     buildTicks: 15, mineralCost: 200, energyCost: 20, creditCost: 100, hp: 120, defense: 5,  attack: 0,  output: { research: 10 },                icon: 'deep_scanner',    description: 'Deep space sensor array' },
+  supply_depot:     { label: 'Supply Depot',     buildTicks: 25, mineralCost: 250, energyCost: 20, creditCost: 200, hp: 200, defense: 8,  attack: 0,  output: { credits: 18, minerals: 6 },    icon: 'trade_hub',       description: 'Orbital logistics hub' },
 };

@@ -165,6 +165,8 @@ export function createBotEmpire(index: number, homeSystemId: string, totalEmpire
     infrastructure: [],
     stations: [],
     ships: [],
+    fleets: [],
+    orbitalStructures: [],
     shipDesigns: [defaultBotShipDesign()],
     completedResearch: [],
     researchQueue: null,

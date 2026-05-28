@@ -3,14 +3,31 @@ import { useRef, useEffect, useCallback } from 'react';
 import { useGameStore } from '@/store/game-store';
 import { STAR_CONFIG, PLANET_CONFIG } from '@/lib/game/constants';
 import { renderPlanetSync, preloadPlanets } from '@/lib/game/planet-renderer';
-import type { StarSystem } from '@/types/game';
+import { PIXEL_ICONS } from '@/components/ui/PixelIcon';
+import type { StarSystem, Fleet } from '@/types/game';
+
+function drawPixelIcon(ctx: CanvasRenderingContext2D, id: string, x: number, y: number, color: string, scale = 2) {
+  const rows = PIXEL_ICONS[id];
+  if (!rows) return;
+  ctx.fillStyle = color;
+  const halfW = 4 * scale;
+  const halfH = 4 * scale;
+  for (let py = 0; py < 8; py++) {
+    const row = rows[py];
+    for (let px = 0; px < 8; px++) {
+      if (row & (0x80 >> px)) {
+        ctx.fillRect(Math.round(x - halfW + px * scale), Math.round(y - halfH + py * scale), scale, scale);
+      }
+    }
+  }
+}
 
 export default function SystemCanvas() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const animRef   = useRef<number>(0);
   const timeRef   = useRef<number>(0);
 
-  const { currentGame, empires, myEmpire, ui, selectPlanet, setView } = useGameStore();
+  const { currentGame, empires, myEmpire, ui, selectPlanet, setView, selectFleet, moveFleetInSystem } = useGameStore();
 
   const system: StarSystem | undefined = currentGame?.galaxy.systems.find(
     s => s.id === ui.selectedSystemId
@@ -36,7 +53,6 @@ export default function SystemCanvas() {
     const H = canvas.height;
     const cx = W / 2;
     const cy = H / 2;
-    const dt = (ts - timeRef.current) / 1000;
     timeRef.current = ts;
 
     ctx.clearRect(0, 0, W, H);
@@ -128,8 +144,6 @@ export default function SystemCanvas() {
     }
 
     // Planets + moons
-    const systemOwner = currentGame?.systemStates[system.id]?.ownerId;
-
     for (let i = 0; i < system.planets.length; i++) {
       const planet = system.planets[i];
       const orbitR = (i + 1.5) * orbitScale;
@@ -140,9 +154,6 @@ export default function SystemCanvas() {
       const py = cy + Math.sin(angle) * orbitR;
 
       const planetR = Math.max(5, 5 + planet.size * 2.5);
-
-      // Shadow on non-lit side
-      const shadowAngle = Math.atan2(py - cy, px - cx);
 
       renderPlanetSync(ctx, planet.type, planet.seed, px, py, planetR);
 
@@ -219,8 +230,87 @@ export default function SystemCanvas() {
       }
     }
 
+    // Fleets
+    for (const empire of empires) {
+      for (const fleet of (empire.fleets ?? [])) {
+        if (fleet.systemId !== system.id) continue;
+        if (fleet.state === 'in_transit') continue;
+
+        const fx = fleet.posX * W;
+        const fy = fleet.posY * H;
+        const isMine = empire.id === myEmpire?.id;
+        const isSelected = fleet.id === ui.selectedFleetId;
+
+        // Empire color ring
+        ctx.strokeStyle = empire.color;
+        ctx.lineWidth = 1.5;
+        ctx.globalAlpha = 0.8;
+        ctx.beginPath();
+        ctx.arc(fx, fy, 12, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.globalAlpha = 1;
+
+        // Ship sprite
+        drawPixelIcon(ctx, 'fleet_ship', fx, fy, empire.color, 2);
+
+        // Selection brackets
+        if (isSelected) {
+          ctx.strokeStyle = '#44ffff';
+          ctx.lineWidth = 2;
+          ctx.globalAlpha = 0.8 + Math.sin(ts * 0.005) * 0.2;
+          const b = 16;
+          // Top-left
+          ctx.beginPath();
+          ctx.moveTo(fx - b, fy - b + 4);
+          ctx.lineTo(fx - b, fy - b);
+          ctx.lineTo(fx - b + 4, fy - b);
+          // Top-right
+          ctx.moveTo(fx + b - 4, fy - b);
+          ctx.lineTo(fx + b, fy - b);
+          ctx.lineTo(fx + b, fy - b + 4);
+          // Bottom-left
+          ctx.moveTo(fx - b, fy + b - 4);
+          ctx.lineTo(fx - b, fy + b);
+          ctx.lineTo(fx - b + 4, fy + b);
+          // Bottom-right
+          ctx.moveTo(fx + b - 4, fy + b);
+          ctx.lineTo(fx + b, fy + b);
+          ctx.lineTo(fx + b, fy + b - 4);
+          ctx.stroke();
+          ctx.globalAlpha = 1;
+        }
+
+        // Ship count badge
+        ctx.fillStyle = empire.color;
+        ctx.font = 'bold 8px Share Tech Mono';
+        ctx.textAlign = 'center';
+        ctx.fillText(String(fleet.shipIds.length), fx, fy - 14);
+
+        // Name label
+        ctx.font = '8px Share Tech Mono';
+        ctx.fillStyle = isMine ? '#c0d0e0' : '#aa6666';
+        ctx.globalAlpha = 0.85;
+        ctx.fillText(fleet.name, fx, fy + 22);
+        ctx.globalAlpha = 1;
+
+        // Move target line
+        if (isSelected && fleet.targetPosX !== undefined && fleet.targetPosY !== undefined) {
+          ctx.strokeStyle = '#44ffff';
+          ctx.lineWidth = 1;
+          ctx.setLineDash([4, 4]);
+          ctx.globalAlpha = 0.5;
+          ctx.beginPath();
+          ctx.moveTo(fx, fy);
+          ctx.lineTo(fleet.targetPosX * W, fleet.targetPosY * H);
+          ctx.stroke();
+          ctx.setLineDash([]);
+          ctx.globalAlpha = 1;
+        }
+      }
+    }
+
     animRef.current = requestAnimationFrame(draw);
-  }, [system, empires, myEmpire, ui.selectedPlanetId, currentGame]);
+  }, [system, empires, myEmpire, ui.selectedPlanetId, ui.selectedFleetId, currentGame]);
 
   useEffect(() => {
     animRef.current = requestAnimationFrame(draw);
@@ -243,12 +333,31 @@ export default function SystemCanvas() {
     const rect = canvas.getBoundingClientRect();
     const mx = e.clientX - rect.left;
     const my = e.clientY - rect.top;
-    const cx = canvas.width / 2;
-    const cy = canvas.height / 2;
+    const W = canvas.width;
+    const H = canvas.height;
+    const cx = W / 2;
+    const cy = H / 2;
     const maxOrbit = system.planets.length > 0 ? system.planets.length + 1 : 2;
     const orbitScale = Math.min(cx, cy) * 0.85 / maxOrbit;
     const now = performance.now();
 
+    // 1) Try fleet click first
+    for (const empire of empires) {
+      for (const fleet of (empire.fleets ?? [])) {
+        if (fleet.systemId !== system.id) continue;
+        if (fleet.state === 'in_transit') continue;
+        const fx = fleet.posX * W;
+        const fy = fleet.posY * H;
+        const dx = mx - fx;
+        const dy = my - fy;
+        if (Math.sqrt(dx * dx + dy * dy) < 14) {
+          selectFleet(fleet.id);
+          return;
+        }
+      }
+    }
+
+    // 2) Planet click
     for (let i = 0; i < system.planets.length; i++) {
       const planet = system.planets[i];
       const orbitR = (i + 1.5) * orbitScale;
@@ -265,8 +374,21 @@ export default function SystemCanvas() {
         return;
       }
     }
+
+    // 3) If a fleet is selected and it's mine, move it
+    const selFleet = myEmpire?.fleets?.find(f => f.id === ui.selectedFleetId && f.systemId === system.id);
+    if (selFleet) {
+      const nx = mx / W;
+      const ny = my / H;
+      moveFleetInSystem(selFleet.id, nx, ny);
+      return;
+    }
+
     selectPlanet(null);
   };
+
+  // Selected fleet overlay info
+  const selFleet: Fleet | undefined = myEmpire?.fleets?.find(f => f.id === ui.selectedFleetId && f.systemId === system?.id);
 
   return (
     <div className="relative w-full h-full">
@@ -277,13 +399,27 @@ export default function SystemCanvas() {
       />
       <button
         className="absolute top-3 left-3 btn-gray text-[9px] px-2 py-1"
-        onClick={() => { setView('galaxy'); selectPlanet(null); }}
+        onClick={() => { setView('galaxy'); selectPlanet(null); selectFleet(null); }}
       >
         ← GALAXY
       </button>
       {system && (
         <div className="absolute top-3 left-1/2 -translate-x-1/2 font-pixel text-[10px] text-accent-cyan glow-text-cyan pointer-events-none whitespace-nowrap">
           {system.name}
+        </div>
+      )}
+      {selFleet && (
+        <div className="absolute top-12 left-3 pixel-panel p-2 text-[9px] font-mono w-52 flex flex-col gap-1" style={{ borderColor: '#44aaff' }}>
+          <div className="font-pixel text-[9px] text-accent-cyan">{selFleet.name}</div>
+          <div className="text-[#8aa0b0]">{selFleet.shipIds.length} ship(s) · {selFleet.state}</div>
+          {selFleet.task && (
+            <div className="text-[#aaaaff]">Task: {selFleet.task.type}</div>
+          )}
+          <div className="text-[#3a5a6a] text-[8px]">Click anywhere to move here</div>
+          <button
+            onClick={() => selectFleet(null)}
+            className="btn-gray text-[8px] py-0.5"
+          >DESELECT</button>
         </div>
       )}
     </div>

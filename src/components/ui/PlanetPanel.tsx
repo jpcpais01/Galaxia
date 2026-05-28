@@ -1,16 +1,20 @@
 'use client';
 import { useRef, useEffect, useState } from 'react';
 import { useGameStore } from '@/store/game-store';
-import { PLANET_CONFIG, INFRA_CONFIG, GROUND_OP_CONFIG } from '@/lib/game/constants';
+import { PLANET_CONFIG, INFRA_CONFIG, GROUND_OP_CONFIG, ORBITAL_CONFIG } from '@/lib/game/constants';
 import { renderPlanetSync, getPlanetBitmap } from '@/lib/game/planet-renderer';
 import { countUsedSlots } from '@/lib/game/economy';
 import { PixelIcon } from '@/components/ui/PixelIcon';
-import type { InfraType, GroundOpType } from '@/types/game';
+import type { GroundOpType, OrbitalStructureType } from '@/types/game';
 
 const GROUND_OP_LIST: { type: GroundOpType; label: string }[] = [
   { type: 'mineral_extractor',     label: 'Mineral Extractor'  },
   { type: 'atmospheric_processor', label: 'Atmo Processor'     },
   { type: 'deep_scanner',          label: 'Deep Scanner'       },
+];
+
+const ORBITAL_LIST: OrbitalStructureType[] = [
+  'orbital_shipyard', 'defense_platform', 'orbital_sensor', 'supply_depot',
 ];
 
 function PlanetDisplay({ type, seed, size }: { type: string; seed: number; size: number }) {
@@ -40,7 +44,7 @@ function PlanetDisplay({ type, seed, size }: { type: string; seed: number; size:
 }
 
 export default function PlanetPanel() {
-  const { currentGame, myEmpire, ui, colonizePlanet, buildGroundOp, destroyInfra, destroyGroundOp, setPanel } = useGameStore();
+  const { currentGame, myEmpire, ui, colonizePlanet, buildGroundOp, destroyInfra, destroyGroundOp, buildOrbitalStructure, destroyOrbitalStructure, setPanel } = useGameStore();
   const [expandedMoon, setExpandedMoon] = useState<string | null>(null);
 
   const system = currentGame?.galaxy.systems.find(s => s.id === ui.selectedSystemId);
@@ -64,6 +68,9 @@ export default function PlanetPanel() {
 
   // Ground ops on this planet
   const myGroundOps = (myEmpire?.groundOps ?? []).filter(g => g.targetId === planet.id);
+
+  // Orbital structures on this planet
+  const myOrbitals = (myEmpire?.orbitalStructures ?? []).filter(o => o.planetId === planet.id);
 
   return (
     <div className="flex flex-col h-full">
@@ -167,6 +174,74 @@ export default function PlanetPanel() {
               BUILD INFRASTRUCTURE →
             </button>
           </>
+        )}
+
+        {/* Orbital Operations — available when system is controlled */}
+        {controlled && (
+          <div>
+            <div className="font-pixel text-[8px] text-[#3a5a6a] mb-2">ORBITAL OPERATIONS</div>
+
+            {myOrbitals.map(orb => {
+              const ocfg = ORBITAL_CONFIG[orb.type];
+              const hpPct = orb.hp / orb.maxHp;
+              return (
+                <div key={orb.id} className="flex items-center justify-between py-1 border-b border-[#0a1020] font-mono text-[10px]">
+                  <span className="flex items-center gap-1.5 text-[#8aa0c0]">
+                    <PixelIcon id={ocfg.icon} color="#8aa0c0" size={11} />
+                    {ocfg.label}
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <span className={
+                      hpPct > 0.6 ? 'text-[#44aaff]' :
+                      hpPct > 0.3 ? 'text-[#ffaa00]' : 'text-[#ff4455]'
+                    }>
+                      {orb.hp}/{orb.maxHp}
+                    </span>
+                    <span className={orb.active ? 'text-[#44aaff]' : 'text-[#aa8800]'}>
+                      {orb.active ? 'ACTIVE' : `${Math.max(0, orb.buildCompletedTick - tick)}t`}
+                    </span>
+                    <button
+                      onClick={() => destroyOrbitalStructure(orb.id)}
+                      className="font-pixel text-[7px] px-1 py-0.5 border border-[#3a1a1a] text-[#6a2a2a] hover:text-[#ff4455] hover:border-[#ff4455] transition-colors"
+                      title="Destroy"
+                    >✕</button>
+                  </div>
+                </div>
+              );
+            })}
+
+            <div className="mt-1 flex flex-col gap-1">
+              {ORBITAL_LIST.map(type => {
+                const ocfg = ORBITAL_CONFIG[type];
+                const already = myOrbitals.some(o => o.type === type);
+                const canAffordOrb = (myEmpire?.resources.minerals ?? 0) >= ocfg.mineralCost &&
+                                     (myEmpire?.resources.credits  ?? 0) >= ocfg.creditCost &&
+                                     (myEmpire?.resources.energy   ?? 0) >= ocfg.energyCost;
+                return (
+                  <button
+                    key={type}
+                    onClick={() => buildOrbitalStructure(planet.id, ui.selectedSystemId!, type)}
+                    disabled={already || !canAffordOrb}
+                    className="flex items-center justify-between px-2 py-1.5 border border-[#1a1a2a] bg-[#05050f] hover:border-[#2a3a4a] disabled:opacity-40 disabled:cursor-not-allowed font-mono text-[9px]"
+                  >
+                    <div className="flex items-start gap-2 text-left">
+                      <div className="mt-0.5 flex-shrink-0">
+                        <PixelIcon id={ocfg.icon} color={already || !canAffordOrb ? '#3a5a6a' : '#8aa0c0'} size={12} />
+                      </div>
+                      <div>
+                        <span className="text-[#8aa0c0]">{ocfg.label}</span>
+                        <div className="text-[#3a5a6a] text-[8px]">{ocfg.description}</div>
+                      </div>
+                    </div>
+                    <div className="text-right text-[#3a5a4a] flex-shrink-0 ml-2">
+                      <div>{ocfg.mineralCost}m</div>
+                      <div>{ocfg.creditCost}c</div>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
         )}
 
         {/* Ground Operations — only on planets with natural resources */}

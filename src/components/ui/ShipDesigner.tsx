@@ -6,14 +6,15 @@ import {
   calcDesignStats, STARTER_DESIGNS,
 } from '@/lib/game/ship-designer';
 import { TILE_CONFIG } from '@/lib/game/constants';
+import { PixelIcon } from './PixelIcon';
 import type { ShipTileType, ShipTile } from '@/types/game';
 
-const TILE_GROUPS = [
-  { label: 'HULL',    tiles: ['cockpit', 'crew_quarters', 'cargo_hold'] as ShipTileType[] },
-  { label: 'WEAPONS', tiles: ['laser_cannon', 'missile_launcher', 'railgun'] as ShipTileType[] },
-  { label: 'DEFENSE', tiles: ['shield_generator', 'armor_plate'] as ShipTileType[] },
-  { label: 'PROPULSION', tiles: ['thruster', 'hyperdrive'] as ShipTileType[] },
-  { label: 'SUPPORT', tiles: ['sensor_array', 'ecm', 'repair_bay'] as ShipTileType[] },
+const TILE_GROUPS: { label: string; tiles: ShipTileType[] }[] = [
+  { label: 'HULL',       tiles: ['cockpit', 'crew_quarters', 'cargo_hold'] },
+  { label: 'WEAPONS',    tiles: ['laser_cannon', 'missile_launcher', 'railgun'] },
+  { label: 'DEFENSE',    tiles: ['shield_generator', 'armor_plate'] },
+  { label: 'PROPULSION', tiles: ['thruster', 'hyperdrive'] },
+  { label: 'SUPPORT',    tiles: ['sensor_array', 'ecm', 'repair_bay'] },
 ];
 
 export default function ShipDesigner() {
@@ -52,6 +53,8 @@ export default function ShipDesigner() {
     setSaved(false);
   };
 
+  const selectedCfg = TILE_CONFIG[selected];
+
   return (
     <div className="flex flex-col h-full">
       <div className="panel-header flex items-center justify-between">
@@ -77,7 +80,7 @@ export default function ShipDesigner() {
         </div>
 
         {/* Templates */}
-        <div className="flex gap-1">
+        <div className="flex flex-wrap gap-1">
           <span className="font-pixel text-[8px] text-[#3a5a6a] self-center">LOAD:</span>
           {STARTER_DESIGNS.map((d, i) => (
             <button key={i} onClick={() => loadStarter(i)} className="btn-gray text-[8px] py-0.5 px-2">
@@ -89,7 +92,7 @@ export default function ShipDesigner() {
         {/* Grid */}
         <div
           className="border border-[#1a1a3a] bg-[#030308] p-1"
-          style={{ display: 'grid', gridTemplateColumns: `repeat(${GRID_SIZE}, 1fr)`, gap: '1px' }}
+          style={{ display: 'grid', gridTemplateColumns: `repeat(${GRID_SIZE}, 32px)`, gap: '2px' }}
         >
           {grid.map(tile => {
             const cfg = TILE_CONFIG[tile.type];
@@ -98,18 +101,17 @@ export default function ShipDesigner() {
               <button
                 key={`${tile.x}-${tile.y}`}
                 onClick={() => place(tile.x, tile.y)}
-                className="aspect-square hover:brightness-125 transition-all"
+                className="hover:brightness-125 transition-all flex items-center justify-center"
                 style={{
-                  background: isEmpty ? '#030308' : cfg.color + '88',
+                  width: 32, height: 32,
+                  background: isEmpty ? '#030308' : cfg.color + '33',
                   border: `1px solid ${isEmpty ? '#0a0a18' : cfg.color + 'aa'}`,
-                  minWidth: '24px',
+                  boxShadow: isEmpty ? 'none' : `inset 0 0 6px ${cfg.color}44`,
                 }}
                 title={isEmpty ? 'Empty' : cfg.label}
               >
-                {!isEmpty && (
-                  <span className="text-[7px] leading-none" style={{ color: cfg.color }}>
-                    {cfg.label.slice(0, 2)}
-                  </span>
+                {!isEmpty && cfg.icon && (
+                  <PixelIcon id={cfg.icon} color={cfg.color} size={20} />
                 )}
               </button>
             );
@@ -117,8 +119,9 @@ export default function ShipDesigner() {
         </div>
 
         {/* Stats */}
-        <div className="grid grid-cols-3 gap-1">
+        <div className="grid grid-cols-4 gap-1">
           {[
+            { label: 'HP',  value: stats.hp,      color: '#ff8866' },
             { label: 'ATK', value: stats.attack,  color: '#ff4455' },
             { label: 'DEF', value: stats.defense, color: '#4488ff' },
             { label: 'SPD', value: stats.speed,   color: '#44ff88' },
@@ -146,21 +149,36 @@ export default function ShipDesigner() {
                     <button
                       key={type}
                       onClick={() => setSelected(type)}
-                      className="px-2 py-1 font-pixel text-[7px] border transition-all"
+                      className="px-1.5 py-1 font-pixel text-[7px] border transition-all flex items-center gap-1"
                       style={{
                         background: selected === type ? cfg.color + '33' : '#030308',
                         borderColor: selected === type ? cfg.color : '#1a1a2a',
                         color: cfg.color,
                         boxShadow: selected === type ? `0 0 6px ${cfg.color}44` : 'none',
                       }}
+                      title={`${cfg.label} — HP ${cfg.hp} · ATK ${cfg.attack} · DEF ${cfg.defense} · SPD ${cfg.speed}`}
                     >
-                      {cfg.label}
+                      <PixelIcon id={cfg.icon} color={cfg.color} size={12} />
+                      <span>{cfg.label}</span>
                     </button>
                   );
                 })}
               </div>
             </div>
           ))}
+        </div>
+
+        {/* Selected tile details */}
+        <div className="pixel-panel p-2 flex items-center gap-2">
+          <PixelIcon id={selectedCfg.icon} color={selectedCfg.color} size={20} />
+          <div className="flex-1">
+            <div className="font-pixel text-[9px]" style={{ color: selectedCfg.color }}>
+              {selectedCfg.label}
+            </div>
+            <div className="font-mono text-[9px] text-[#3a5a6a]">
+              HP {selectedCfg.hp} · ATK {selectedCfg.attack} · DEF {selectedCfg.defense} · SPD {selectedCfg.speed}
+            </div>
+          </div>
         </div>
 
         {/* Existing designs */}

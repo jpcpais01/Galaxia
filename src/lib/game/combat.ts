@@ -1,4 +1,4 @@
-import type { Empire, Ship, CombatReport, GameEvent } from '@/types/game';
+import type { Empire, Ship, CombatReport, GameEvent, Fleet } from '@/types/game';
 import { SeededRandom } from '@/lib/noise';
 
 export interface CombatResult {
@@ -145,6 +145,35 @@ function makeNoContest(
     tick, empireId: attacker.id, targetEmpireId: defender.id, systemId,
   };
   return { report, attackerEmpire: {}, defenderEmpire: {}, event };
+}
+
+// ─── Fleet combat helpers ───────────────────────────────────────────────────
+
+export function computeFleetDamageToStation(_fleet: Fleet, fleetShips: Ship[], stationDefense: number): number {
+  const attack = fleetShips.reduce((s, sh) => s + sh.attack, 0);
+  return Math.max(1, attack - Math.floor(stationDefense / 2));
+}
+
+export function computeFleetDamageToGarrison(_fleet: Fleet, fleetShips: Ship[], garrisonDefense: number): number {
+  const attack = fleetShips.reduce((s, sh) => s + sh.attack, 0);
+  return Math.max(1, Math.floor(attack * 0.6) - Math.floor(garrisonDefense / 3));
+}
+
+export function combatRound(
+  attackerShips: Ship[],
+  defenderShips: Ship[],
+  rng: SeededRandom
+): { attackerShips: Ship[]; defenderShips: Ship[] } {
+  if (attackerShips.length === 0 || defenderShips.length === 0) {
+    return { attackerShips, defenderShips };
+  }
+  const aPow = shipPower(attackerShips);
+  const dPow = shipPower(defenderShips);
+  const aDmg = Math.max(1, aPow.attack - Math.floor(dPow.defense / 3)) + rng.int(-2, 4);
+  const dDmg = Math.max(1, dPow.attack - Math.floor(aPow.defense / 3)) + rng.int(-2, 4);
+  const newDefender = damageShips(defenderShips, aDmg, rng);
+  const newAttacker = damageShips(attackerShips, dDmg, rng);
+  return { attackerShips: newAttacker, defenderShips: newDefender };
 }
 
 export function getShipStats(tiles: Ship['tiles']): { attack: number; defense: number; speed: number; hp: number } {

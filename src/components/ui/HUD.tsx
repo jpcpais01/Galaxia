@@ -10,6 +10,7 @@ import DiplomacyPanel from './DiplomacyPanel';
 import ShipDesigner from './ShipDesigner';
 import AssemblyPanel from './AssemblyPanel';
 import ColoniesPanel from './ColoniesPanel';
+import FleetPanel from './FleetPanel';
 
 import { useRouter } from 'next/navigation';
 
@@ -61,6 +62,7 @@ function TopBar() {
         {navBtn('colonies',   'COLONY', '#44ffaa')}
         {navBtn('research',   'LAB',    '#8888ff')}
         {navBtn('ships',      'SHIPS',  '#44aaff')}
+        {navBtn('fleets',     'FLEET',  '#00ddff')}
         {navBtn('designer',   'DESIGN', '#ff8844')}
         {navBtn('diplomacy',  'DIPL',   '#ffaa00')}
         {navBtn('assembly',   'ASMBL',  '#00ff88')}
@@ -109,34 +111,45 @@ function ShipFleetPanel() {
         {designs.length > 0 && myEmpire.controlledSystems.length > 0 && (
           <div>
             <div className="font-pixel text-[8px] text-[#3a5a6a] mb-2">BUILD NEW SHIP</div>
-            {designs.map(d => {
-              const hasShipyard = myEmpire.infrastructure.some(
-                i => i.type === 'shipyard' && i.active &&
-                  myEmpire.controlledSystems.includes(i.systemId)
+            {(() => {
+              const groundShipyard = myEmpire.infrastructure.find(
+                i => i.type === 'shipyard' && i.active && myEmpire.controlledSystems.includes(i.systemId)
               );
-              const affordable = (myEmpire.resources.minerals ?? 0) >= d.mineralCost &&
-                (myEmpire.resources.credits ?? 0) >= d.creditCost;
-
+              const orbitalShipyard = (myEmpire.orbitalStructures ?? []).find(
+                o => o.type === 'orbital_shipyard' && o.active && myEmpire.controlledSystems.includes(o.systemId)
+              );
+              const yardSystem = groundShipyard?.systemId ?? orbitalShipyard?.systemId;
+              const hasShipyard = !!yardSystem;
               return (
-                <button
-                  key={d.id}
-                  onClick={() => {
-                    const sys = myEmpire.infrastructure.find(i => i.type === 'shipyard' && i.active);
-                    if (sys) buildShip(d.id, sys.systemId);
-                  }}
-                  disabled={!hasShipyard || !affordable}
-                  className="w-full flex items-center justify-between p-2 border border-[#1a1a2a] bg-[#05050f] hover:border-[#2a2a4a] disabled:opacity-40 disabled:cursor-not-allowed mb-1"
-                >
-                  <div className="text-left">
-                    <div className="font-pixel text-[9px] text-[#c0d0e0]">{d.name}</div>
-                    <div className="font-mono text-[9px] text-[#3a5a6a]">
-                      {d.mineralCost}min · {d.creditCost}crd · {d.buildTicks}t
+                <>
+                  {!hasShipyard && (
+                    <div className="font-mono text-[9px] text-[#aa6644] mb-2 text-center">
+                      Build a Shipyard (ground) or Orbital Shipyard first
                     </div>
-                  </div>
-                  <span className="font-pixel text-[8px] text-[#44aaff]">BUILD</span>
-                </button>
+                  )}
+                  {designs.map(d => {
+                    const affordable = (myEmpire.resources.minerals ?? 0) >= d.mineralCost &&
+                      (myEmpire.resources.credits ?? 0) >= d.creditCost;
+                    return (
+                      <button
+                        key={d.id}
+                        onClick={() => { if (yardSystem) buildShip(d.id, yardSystem); }}
+                        disabled={!hasShipyard || !affordable}
+                        className="w-full flex items-center justify-between p-2 border border-[#1a1a2a] bg-[#05050f] hover:border-[#2a2a4a] disabled:opacity-40 disabled:cursor-not-allowed mb-1"
+                      >
+                        <div className="text-left">
+                          <div className="font-pixel text-[9px] text-[#c0d0e0]">{d.name}</div>
+                          <div className="font-mono text-[9px] text-[#3a5a6a]">
+                            {d.mineralCost}min · {d.creditCost}crd · {d.buildTicks}t
+                          </div>
+                        </div>
+                        <span className="font-pixel text-[8px] text-[#44aaff]">BUILD</span>
+                      </button>
+                    );
+                  })}
+                </>
               );
-            })}
+            })()}
           </div>
         )}
       </div>
@@ -152,6 +165,7 @@ export default function HUD({ children }: { children: React.ReactNode }) {
       case 'colonies':  return <ColoniesPanel />;
       case 'research':  return <ResearchPanel />;
       case 'ships':     return <ShipFleetPanel />;
+      case 'fleets':    return <FleetPanel />;
       case 'designer':  return <ShipDesigner />;
       case 'diplomacy': return <DiplomacyPanel />;
       case 'assembly':  return <AssemblyPanel />;

@@ -1,5 +1,5 @@
 import type { Empire, Resources, Infrastructure } from '@/types/game';
-import { INFRA_CONFIG, STATION_CONFIG, GROUND_OP_CONFIG } from './constants';
+import { INFRA_CONFIG, STATION_CONFIG, GROUND_OP_CONFIG, ORBITAL_CONFIG } from './constants';
 import { RESEARCH_BY_ID } from './research-tree';
 
 export function computeResourceRates(empire: Empire, currentTick = 0): Resources {
@@ -29,6 +29,16 @@ export function computeResourceRates(empire: Empire, currentTick = 0): Resources
   for (const op of (empire.groundOps ?? [])) {
     if (!op.active) continue;
     const cfg = GROUND_OP_CONFIG[op.type];
+    for (const [key, val] of Object.entries(cfg.output) as [keyof Resources, number][]) {
+      const bonus = 1 + (resourceBonuses[key] ?? 0) / 100;
+      rates[key] = (rates[key] || 0) + val * bonus;
+    }
+  }
+
+  // Orbital structures
+  for (const orb of (empire.orbitalStructures ?? [])) {
+    if (!orb.active) continue;
+    const cfg = ORBITAL_CONFIG[orb.type];
     for (const [key, val] of Object.entries(cfg.output) as [keyof Resources, number][]) {
       const bonus = 1 + (resourceBonuses[key] ?? 0) / 100;
       rates[key] = (rates[key] || 0) + val * bonus;
@@ -115,6 +125,12 @@ export function applyTick(empire: Empire, currentTick: number): Partial<Empire> 
     active: op.buildCompletedTick <= currentTick,
   }));
 
+  // Mark orbital structures as active when build completes
+  const updatedOrbitals = (empire.orbitalStructures ?? []).map(orb => ({
+    ...orb,
+    active: orb.buildCompletedTick <= currentTick,
+  }));
+
   // Process pending surveys → surveyedSystems
   const completedSurveys = (empire.pendingSurveys ?? []).filter(s => s.completesAtTick <= currentTick);
   const remainingPendingSurveys = (empire.pendingSurveys ?? []).filter(s => s.completesAtTick > currentTick);
@@ -154,6 +170,7 @@ export function applyTick(empire: Empire, currentTick: number): Partial<Empire> 
     resourceRates: rates,
     infrastructure: updatedInfra,
     groundOps: updatedGroundOps,
+    orbitalStructures: updatedOrbitals,
     surveyedSystems: newSurveyedSystems,
     pendingSurveys: remainingPendingSurveys,
     colonizedPlanets: newColonizedPlanets,
