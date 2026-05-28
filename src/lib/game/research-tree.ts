@@ -76,22 +76,6 @@ export const RESEARCH_TREE: ResearchNode[] = [
     'ai', 5, 1500, 300, ['ai_4'],
     [{ type: 'resource_rate', target: 'compute', value: 80 }, { type: 'unlock', target: 'singularity_victory', value: 1 }]),
 
-  // ─── Spirituality ──────────────────────────────────────────────────────────
-  node('spi_1', 'Xeno-Empathy', 'Understand alien cultures; diplomatic bonuses.',
-    'spirituality', 1, 60, 0, [],
-    [{ type: 'diplomacy', target: 'influence', value: 10 }]),
-  node('spi_2', 'Cultural Exchange', 'Spread culture; passive credit income.',
-    'spirituality', 2, 140, 10, ['spi_1'],
-    [{ type: 'resource_rate', target: 'credits', value: 15 }, { type: 'diplomacy', target: 'influence', value: 10 }]),
-  node('spi_3', 'Galactic Diplomacy', 'Unlock Alliance proposals and Galactic Assembly votes.',
-    'spirituality', 3, 260, 20, ['spi_2'],
-    [{ type: 'unlock', target: 'alliance_proposals', value: 1 }]),
-  node('spi_4', 'Precursor Communion', 'Contact ancient intelligences for wisdom bonuses.',
-    'spirituality', 4, 440, 30, ['spi_3'],
-    [{ type: 'resource_rate', target: 'research', value: 25 }, { type: 'resource_rate', target: 'compute', value: 20 }]),
-  node('spi_5', 'Enlightenment', 'Transcend the physical; diplomatic victory conditions.',
-    'spirituality', 5, 1000, 80, ['spi_4'],
-    [{ type: 'diplomacy', target: 'influence', value: 50 }, { type: 'unlock', target: 'diplomatic_victory', value: 1 }]),
 ];
 
 export const RESEARCH_BY_ID: Record<string, ResearchNode> = Object.fromEntries(
@@ -103,5 +87,4 @@ export const RESEARCH_BY_PATH: Record<ResearchPath, ResearchNode[]> = {
   biology:      RESEARCH_TREE.filter(n => n.path === 'biology'),
   engineering:  RESEARCH_TREE.filter(n => n.path === 'engineering'),
   ai:           RESEARCH_TREE.filter(n => n.path === 'ai'),
-  spirituality: RESEARCH_TREE.filter(n => n.path === 'spirituality'),
 };

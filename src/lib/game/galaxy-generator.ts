@@ -153,7 +153,10 @@ function poissonDisk(rng: SeededRandom, width: number, height: number, count: nu
 
     // Skip if outside circle (safety check)
     const dCx = x - cx; const dCy = y - cy;
-    if (dCx * dCx + dCy * dCy > galaxyRadiusSq) continue;
+    const dCsq = dCx * dCx + dCy * dCy;
+    if (dCsq > galaxyRadiusSq) continue;
+    // Skip if inside center void (reserved for black hole)
+    if (dCsq < 130 * 130) continue;
 
     const gx = Math.floor(x / cellSize);
     const gy = Math.floor(y / cellSize);
@@ -181,10 +184,10 @@ function poissonDisk(rng: SeededRandom, width: number, height: number, count: nu
   return points;
 }
 
-export function generateGalaxy(seed: number): GalaxyData {
+export function generateGalaxy(seed: number, systemCount = SYSTEM_COUNT): GalaxyData {
   const rng = new SeededRandom(seed);
 
-  const positions = poissonDisk(rng, GALAXY_WIDTH, GALAXY_HEIGHT, SYSTEM_COUNT, MIN_SYSTEM_DISTANCE);
+  const positions = poissonDisk(rng, GALAXY_WIDTH, GALAXY_HEIGHT, systemCount, MIN_SYSTEM_DISTANCE);
 
   const systems: StarSystem[] = positions.map((pos, i) => {
     const sysRng = new SeededRandom(seed + i * 7919);
@@ -255,7 +258,32 @@ export function generateGalaxy(seed: number): GalaxyData {
     }
   }
 
-  return { systems, seed, width: GALAXY_WIDTH, height: GALAXY_HEIGHT };
+  // ── Black hole at galaxy center ──────────────────────────────────────────
+  const bhId = 'sys_bh';
+  const bhX  = GALAXY_WIDTH  / 2;   // 1000
+  const bhY  = GALAXY_HEIGHT / 2;   // 1000
+  const blackHoleSystem: StarSystem = {
+    id: bhId,
+    name: 'Singularity',
+    x: bhX, y: bhY,
+    stars: [{ id: `${bhId}_s0`, type: 'black_hole', size: 5 }],
+    planets: [],
+    connections: [],
+    isBlackHole: true,
+  };
+  // Connect to nearest 4 regular systems
+  const bhNeighbors = systems
+    .map(s => ({ id: s.id, d: (s.x - bhX) ** 2 + (s.y - bhY) ** 2 }))
+    .sort((a, b) => a.d - b.d)
+    .slice(0, 4);
+  blackHoleSystem.connections = bhNeighbors.map(n => n.id);
+  for (const n of bhNeighbors) {
+    const s = systems.find(ss => ss.id === n.id);
+    if (s && !s.connections.includes(bhId)) s.connections.push(bhId);
+  }
+  systems.push(blackHoleSystem);
+
+  return { systems, seed, width: GALAXY_WIDTH, height: GALAXY_HEIGHT, blackHoleSystemId: bhId };
 }
 
 export function findHomeSystem(galaxy: GalaxyData, empireIndex: number): string {

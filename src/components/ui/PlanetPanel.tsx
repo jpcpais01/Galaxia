@@ -1,10 +1,16 @@
 'use client';
 import { useRef, useEffect, useState } from 'react';
 import { useGameStore } from '@/store/game-store';
-import { PLANET_CONFIG, INFRA_CONFIG } from '@/lib/game/constants';
+import { PLANET_CONFIG, INFRA_CONFIG, GROUND_OP_CONFIG } from '@/lib/game/constants';
 import { renderPlanetSync, getPlanetBitmap } from '@/lib/game/planet-renderer';
 import { countUsedSlots } from '@/lib/game/economy';
-import type { InfraType } from '@/types/game';
+import type { InfraType, GroundOpType } from '@/types/game';
+
+const GROUND_OP_LIST: { type: GroundOpType; label: string; icon: string }[] = [
+  { type: 'mineral_extractor',     label: 'Mineral Extractor',  icon: '⛏' },
+  { type: 'atmospheric_processor', label: 'Atmo Processor',     icon: '🌫' },
+  { type: 'deep_scanner',          label: 'Deep Scanner',       icon: '📡' },
+];
 
 function PlanetDisplay({ type, seed, size }: { type: string; seed: number; size: number }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -33,7 +39,7 @@ function PlanetDisplay({ type, seed, size }: { type: string; seed: number; size:
 }
 
 export default function PlanetPanel() {
-  const { currentGame, myEmpire, ui, colonizePlanet, setPanel } = useGameStore();
+  const { currentGame, myEmpire, ui, colonizePlanet, buildGroundOp, setPanel } = useGameStore();
   const [expandedMoon, setExpandedMoon] = useState<string | null>(null);
 
   const system = currentGame?.galaxy.systems.find(s => s.id === ui.selectedSystemId);
@@ -44,14 +50,19 @@ export default function PlanetPanel() {
     </div>
   );
 
-  const cfg = PLANET_CONFIG[planet.type];
-  const colonized = myEmpire?.colonizedPlanets.includes(planet.id) ?? false;
-  const controlled = myEmpire?.controlledSystems.includes(ui.selectedSystemId ?? '') ?? false;
-  const canColonize = controlled && planet.colonizable && !colonized;
-  const canAffordColonize = (myEmpire?.resources.credits ?? 0) >= 150;
+  const tick   = currentGame?.tick ?? 0;
+  const cfg    = PLANET_CONFIG[planet.type];
+  const colonized    = myEmpire?.colonizedPlanets.includes(planet.id) ?? false;
+  const pendingCol   = (myEmpire?.pendingColonizations ?? []).find(c => c.planetId === planet.id);
+  const controlled   = myEmpire?.controlledSystems.includes(ui.selectedSystemId ?? '') ?? false;
+  const canColonize  = controlled && planet.colonizable && !colonized && !pendingCol;
+  const canAffordCol = (myEmpire?.resources.credits ?? 0) >= 150;
 
   const usedSlots = countUsedSlots(planet.id, myEmpire?.infrastructure ?? []);
-  const myInfra = (myEmpire?.infrastructure ?? []).filter(i => i.planetId === planet.id);
+  const myInfra   = (myEmpire?.infrastructure ?? []).filter(i => i.planetId === planet.id);
+
+  // Ground ops on this planet
+  const myGroundOps = (myEmpire?.groundOps ?? []).filter(g => g.targetId === planet.id);
 
   return (
     <div className="flex flex-col h-full">
@@ -77,15 +88,25 @@ export default function PlanetPanel() {
           </div>
         </div>
 
-        {/* Colonize */}
+        {/* Pending colonization */}
+        {pendingCol && (
+          <div className="font-mono text-[9px] text-center bg-[#0a0a10] border border-[#2a2a1a] px-2 py-2">
+            <div className="text-[#ffaa00]">◐ COLONY SHIPS EN ROUTE</div>
+            <div className="text-[#6a5a00] mt-0.5">
+              ETA: {Math.max(0, pendingCol.completesAtTick - tick)} ticks
+            </div>
+          </div>
+        )}
+
+        {/* Colonize button */}
         {canColonize && (
           <button
             onClick={() => colonizePlanet(ui.selectedSystemId!, planet.id)}
-            disabled={!canAffordColonize}
+            disabled={!canAffordCol}
             className="btn-gold w-full py-2 text-[9px] disabled:opacity-40"
           >
             COLONIZE PLANET
-            <span className="block text-[8px] text-[#6a5000]">150 credits • {planet.infraSlots} build slots</span>
+            <span className="block text-[8px] text-[#6a5000]">150 credits • 50 ticks • {planet.infraSlots} build slots</span>
           </button>
         )}
 
@@ -113,12 +134,11 @@ export default function PlanetPanel() {
               {/* Built infra */}
               {myInfra.map(infra => {
                 const icfg = INFRA_CONFIG[infra.type];
-                const active = infra.active;
                 return (
                   <div key={infra.id} className="flex items-center justify-between py-1 border-b border-[#0a1020] font-mono text-[10px]">
                     <span className="text-[#6a8a6a]">{icfg.icon} {icfg.label}</span>
-                    <span className={active ? 'text-[#44aa44]' : 'text-[#aa8800]'}>
-                      {active ? 'ACTIVE' : 'BUILDING...'}
+                    <span className={infra.active ? 'text-[#44aa44]' : 'text-[#aa8800]'}>
+                      {infra.active ? 'ACTIVE' : `${Math.max(0, infra.buildCompletedTick - tick)}t`}
                     </span>
                   </div>
                 );
@@ -133,6 +153,53 @@ export default function PlanetPanel() {
           </>
         )}
 
+        {/* Ground Operations (available on controlled systems, no colonization needed) */}
+        {controlled && (
+          <div>
+            <div className="font-pixel text-[8px] text-[#3a5a6a] mb-2">GROUND OPERATIONS</div>
+
+            {/* Active / building ops */}
+            {myGroundOps.map(op => {
+              const gcfg = GROUND_OP_CONFIG[op.type];
+              return (
+                <div key={op.id} className="flex items-center justify-between py-1 border-b border-[#0a1020] font-mono text-[10px]">
+                  <span className="text-[#6a8a8a]">{gcfg.icon} {gcfg.label}</span>
+                  <span className={op.active ? 'text-[#44aaaa]' : 'text-[#aa8800]'}>
+                    {op.active ? 'ACTIVE' : `${Math.max(0, op.buildCompletedTick - tick)}t`}
+                  </span>
+                </div>
+              );
+            })}
+
+            {/* Build new ops */}
+            <div className="mt-1 flex flex-col gap-1">
+              {GROUND_OP_LIST.map(({ type, icon }) => {
+                const gcfg    = GROUND_OP_CONFIG[type];
+                const already = myGroundOps.some(g => g.type === type);
+                const canAfford = (myEmpire?.resources.minerals ?? 0) >= gcfg.mineralCost &&
+                                  (myEmpire?.resources.credits  ?? 0) >= gcfg.creditCost;
+                return (
+                  <button
+                    key={type}
+                    onClick={() => buildGroundOp(ui.selectedSystemId!, planet.id, type)}
+                    disabled={already || !canAfford}
+                    className="flex items-center justify-between px-2 py-1.5 border border-[#1a1a2a] bg-[#05050f] hover:border-[#2a3a3a] disabled:opacity-40 disabled:cursor-not-allowed font-mono text-[9px]"
+                  >
+                    <div className="text-left">
+                      <span className="text-[#6a8a8a]">{icon} {gcfg.label}</span>
+                      <div className="text-[#3a5a5a] text-[8px]">{gcfg.description}</div>
+                    </div>
+                    <div className="text-right text-[#3a5a4a] flex-shrink-0 ml-2">
+                      <div>{gcfg.mineralCost}m</div>
+                      <div>{gcfg.creditCost}c</div>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
         {/* Moons */}
         {planet.moons.length > 0 && (
           <div>
@@ -140,6 +207,8 @@ export default function PlanetPanel() {
             {planet.moons.map(moon => {
               const moonCfg = PLANET_CONFIG[moon.type];
               const expanded = expandedMoon === moon.id;
+              // Ground ops on this moon
+              const moonOps = (myEmpire?.groundOps ?? []).filter(g => g.targetId === moon.id);
               return (
                 <div key={moon.id}>
                   <button
@@ -149,6 +218,7 @@ export default function PlanetPanel() {
                     <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: moonCfg.groundColor }} />
                     <span className="flex-1">{moon.name}</span>
                     {moon.hasResources && <span className="text-[#ffaa00] text-[9px]">⛏</span>}
+                    {moonOps.length > 0 && <span className="text-[#44aaaa] text-[9px]">●</span>}
                     <span className="text-[#2a3a4a] text-[9px]">{expanded ? '▲' : '▼'}</span>
                   </button>
                   {expanded && (
@@ -163,6 +233,39 @@ export default function PlanetPanel() {
                           {moon.hasResources ? 'PRESENT' : 'NONE'}
                         </span>
                       </div>
+                      {/* Ground ops on moon */}
+                      {controlled && (
+                        <div className="mt-1 border-t border-[#0a0a1a] pt-1">
+                          <div className="font-pixel text-[7px] text-[#3a5a6a] mb-1">GROUND OPS</div>
+                          {GROUND_OP_LIST.map(({ type, icon }) => {
+                            const gcfg    = GROUND_OP_CONFIG[type];
+                            const existing = moonOps.find(g => g.type === type);
+                            const canAfford = (myEmpire?.resources.minerals ?? 0) >= gcfg.mineralCost &&
+                                              (myEmpire?.resources.credits  ?? 0) >= gcfg.creditCost;
+                            if (existing) {
+                              return (
+                                <div key={type} className="flex justify-between py-0.5">
+                                  <span className="text-[#4a6a6a]">{icon} {gcfg.label}</span>
+                                  <span className={existing.active ? 'text-[#44aaaa]' : 'text-[#aa8800]'}>
+                                    {existing.active ? 'ACTIVE' : `${Math.max(0, existing.buildCompletedTick - tick)}t`}
+                                  </span>
+                                </div>
+                              );
+                            }
+                            return (
+                              <button
+                                key={type}
+                                onClick={() => buildGroundOp(ui.selectedSystemId!, moon.id, type)}
+                                disabled={!canAfford}
+                                className="w-full flex justify-between py-0.5 disabled:opacity-40 disabled:cursor-not-allowed hover:text-[#6a9a9a]"
+                              >
+                                <span className="text-[#3a5a5a]">{icon} {gcfg.label}</span>
+                                <span className="text-[#2a4a4a]">{gcfg.mineralCost}m {gcfg.creditCost}c</span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>

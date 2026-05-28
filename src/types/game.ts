@@ -4,7 +4,7 @@ export type PlanetType =
   | 'gas_giant' | 'ice_giant' | 'barren' | 'molten' | 'toxic'
   | 'irradiated' | 'desert' | 'frozen' | 'deep_ocean' | 'storm';
 
-export type StarType = 'yellow' | 'red_dwarf' | 'blue_giant' | 'orange' | 'white_dwarf' | 'neutron';
+export type StarType = 'yellow' | 'red_dwarf' | 'blue_giant' | 'orange' | 'white_dwarf' | 'neutron' | 'black_hole';
 
 export type StationType = 'space_station' | 'mining_station' | 'military_outpost' | 'research_station' | 'stargate';
 
@@ -13,7 +13,9 @@ export type InfraType =
   | 'research_lab' | 'ai_datacenter' | 'trade_hub' | 'colony_hub'
   | 'defense_battery' | 'shipyard';
 
-export type ResearchPath = 'physics' | 'biology' | 'engineering' | 'ai' | 'spirituality';
+export type GroundOpType = 'mineral_extractor' | 'atmospheric_processor' | 'deep_scanner';
+
+export type ResearchPath = 'physics' | 'biology' | 'engineering' | 'ai';
 
 export type ShipTileType =
   | 'cockpit' | 'crew_quarters' | 'cargo_hold'
@@ -77,6 +79,7 @@ export interface StarSystem {
   stars: Star[];
   planets: Planet[];
   connections: string[];
+  isBlackHole?: boolean;
 }
 
 export interface Infrastructure {
@@ -88,6 +91,27 @@ export interface Infrastructure {
   buildStartedTick: number;
   buildCompletedTick: number;
   active: boolean;
+}
+
+export interface GroundOp {
+  id: string;
+  type: GroundOpType;
+  targetId: string;   // planet.id or moon.id
+  systemId: string;
+  buildStartedTick: number;
+  buildCompletedTick: number;
+  active: boolean;
+}
+
+export interface PendingSurvey {
+  systemId: string;
+  completesAtTick: number;
+}
+
+export interface PendingColonization {
+  planetId: string;
+  systemId: string;
+  completesAtTick: number;
 }
 
 export interface Station {
@@ -211,6 +235,7 @@ export interface Empire {
   controlledSystems: string[];
   colonizedPlanets: string[];
   infrastructure: Infrastructure[];
+  groundOps: GroundOp[];
   stations: Station[];
   ships: Ship[];
   shipDesigns: ShipDesign[];
@@ -219,6 +244,8 @@ export interface Empire {
   researchProgress: number;
   diplomacy: DiplomacyRelation[];
   surveyedSystems: string[];
+  pendingSurveys: PendingSurvey[];
+  pendingColonizations: PendingColonization[];
   isOnline: boolean;
   lastSeen: number;
   score: number;
@@ -260,6 +287,7 @@ export interface GalaxyData {
   seed: number;
   width: number;
   height: number;
+  blackHoleSystemId?: string;
 }
 
 export interface GameMeta {
@@ -276,6 +304,7 @@ export interface GameMeta {
   lastTickTime: number;
   winnerId?: string;
   seed: number;
+  starCount: number;
   galaxy: GalaxyData; // never stored in Firestore — regenerated locally from seed
   systemStates: Record<string, SystemState>;
   assembly: AssemblyVote[];

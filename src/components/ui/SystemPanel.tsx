@@ -1,9 +1,19 @@
 'use client';
 import { useGameStore } from '@/store/game-store';
-import { PLANET_CONFIG, STAR_CONFIG } from '@/lib/game/constants';
+import { PLANET_CONFIG, STAR_CONFIG, GROUND_OP_CONFIG } from '@/lib/game/constants';
+import type { GroundOpType } from '@/types/game';
+
+const GROUND_OPS: { type: GroundOpType; label: string; icon: string }[] = [
+  { type: 'mineral_extractor',     label: 'Mineral Extractor',  icon: '⛏' },
+  { type: 'atmospheric_processor', label: 'Atmo Processor',     icon: '🌫' },
+  { type: 'deep_scanner',          label: 'Deep Scanner',       icon: '📡' },
+];
 
 export default function SystemPanel() {
-  const { currentGame, myEmpire, empires, ui, setView, surveySystem, buildStation, selectPlanet } = useGameStore();
+  const {
+    currentGame, myEmpire, empires, ui,
+    setView, surveySystem, buildStation, buildGroundOp, selectPlanet,
+  } = useGameStore();
 
   const system = currentGame?.galaxy.systems.find(s => s.id === ui.selectedSystemId);
   if (!system) return (
@@ -12,18 +22,37 @@ export default function SystemPanel() {
     </div>
   );
 
+  const tick  = currentGame?.tick ?? 0;
   const state = currentGame?.systemStates[system.id];
   const owner = state?.ownerId ? empires.find(e => e.id === state.ownerId) : null;
   const isMine = owner?.id === myEmpire?.id;
   const surveyed = myEmpire?.surveyedSystems.includes(system.id) ?? false;
-  const canSurvey = myEmpire && !surveyed;
-  const canClaim = myEmpire && surveyed && !state?.ownerId;
-  const canAffordStation = (myEmpire?.resources.minerals ?? 0) >= 300 && (myEmpire?.resources.credits ?? 0) >= 200;
+
+  // Pending survey
+  const pendingSurvey = (myEmpire?.pendingSurveys ?? []).find(s => s.systemId === system.id);
+  const isSurveyPending = !!pendingSurvey;
+
+  // Adjacency check: target must be connected to an already-surveyed system
+  const hasAdjacentSurveyed = system.connections.some(
+    id => myEmpire?.surveyedSystems.includes(id) ?? false
+  );
+
+  const canSurvey      = !!(myEmpire && !surveyed && !isSurveyPending && hasAdjacentSurveyed);
+  const surveyBlocked  = !!(myEmpire && !surveyed && !isSurveyPending && !hasAdjacentSurveyed);
+  const canClaim       = !!(myEmpire && surveyed && !state?.ownerId);
+  const canAffordStn   = (myEmpire?.resources.minerals ?? 0) >= 300 &&
+                         (myEmpire?.resources.credits  ?? 0) >= 200;
+
+  // Ground ops on planets/moons in this system (only if controlled)
+  const myGroundOps = (myEmpire?.groundOps ?? []).filter(g => g.systemId === system.id);
 
   return (
     <div className="flex flex-col h-full">
       <div className="panel-header">
         {system.name}
+        {system.isBlackHole && (
+          <span className="ml-2 font-pixel text-[8px] text-[#ff3300]">◉ BLACK HOLE</span>
+        )}
       </div>
 
       <div className="flex-1 scrollable p-3 flex flex-col gap-3">
@@ -32,7 +61,7 @@ export default function SystemPanel() {
           <div className="font-pixel text-[8px] text-[#3a5a6a] mb-2">STARS ({system.stars.length})</div>
           <div className="flex flex-col gap-1">
             {system.stars.map(star => {
-              const cfg = STAR_CONFIG[star.type];
+              const cfg = STAR_CONFIG[star.type] ?? STAR_CONFIG['yellow'];
               return (
                 <div key={star.id} className="flex items-center gap-2 font-mono text-[11px]">
                   <div className="w-4 h-4 rounded-full border" style={{
@@ -58,10 +87,18 @@ export default function SystemPanel() {
           </div>
           <div className="flex justify-between">
             <span className="text-[#3a5a6a]">Surveyed</span>
-            <span className={surveyed ? 'text-[#00ff88]' : 'text-[#334455]'}>
-              {surveyed ? 'YES' : 'NO'}
+            <span className={surveyed ? 'text-[#00ff88]' : isSurveyPending ? 'text-[#ffaa00]' : 'text-[#334455]'}>
+              {surveyed ? 'YES' : isSurveyPending ? 'IN PROGRESS' : 'NO'}
             </span>
           </div>
+          {isSurveyPending && (
+            <div className="flex justify-between">
+              <span className="text-[#3a5a6a]">ETA</span>
+              <span className="text-[#ffaa00]">
+                {Math.max(0, pendingSurvey!.completesAtTick - tick)} ticks
+              </span>
+            </div>
+          )}
           <div className="flex justify-between">
             <span className="text-[#3a5a6a]">Planets</span>
             <span className="text-[#8aa0b0]">{system.planets.length}</span>
@@ -70,22 +107,28 @@ export default function SystemPanel() {
 
         {/* Actions */}
         <div className="flex flex-col gap-2">
-          {canSurvey && (
+          {canSurvey && !system.isBlackHole && (
             <button onClick={() => surveySystem(system.id)} className="btn-gold text-[9px] w-full py-2">
               SURVEY SYSTEM
+              <span className="block text-[8px] text-[#6a5000]">Takes 20 ticks</span>
             </button>
+          )}
+          {surveyBlocked && !surveyed && !isSurveyPending && (
+            <div className="font-mono text-[9px] text-[#44556a] bg-[#050510] border border-[#1a1a2a] px-2 py-2 text-center">
+              🔒 Must survey an adjacent system first
+            </div>
           )}
           {canClaim && (
             <button
               onClick={() => buildStation(system.id, 'space_station')}
-              disabled={!canAffordStation}
+              disabled={!canAffordStn}
               className="btn-cyan text-[9px] w-full py-2 disabled:opacity-40 disabled:cursor-not-allowed"
             >
               BUILD STATION
-              <span className="block text-[8px] text-[#3a6a8a]">300 min • 200 crd</span>
+              <span className="block text-[8px] text-[#3a6a8a]">300 min • 200 crd • 50 ticks</span>
             </button>
           )}
-          {(surveyed || isMine) && ui.view !== 'system' && (
+          {(surveyed || isMine) && ui.view !== 'system' && !system.isBlackHole && (
             <button
               onClick={() => setView('system')}
               className="btn-green text-[9px] w-full py-2"
@@ -96,13 +139,14 @@ export default function SystemPanel() {
         </div>
 
         {/* Planets */}
-        {surveyed && system.planets.length > 0 && (
+        {surveyed && system.planets.length > 0 && !system.isBlackHole && (
           <div>
             <div className="font-pixel text-[8px] text-[#3a5a6a] mb-2">PLANETS</div>
             <div className="flex flex-col gap-1">
               {system.planets.map(planet => {
                 const cfg = PLANET_CONFIG[planet.type];
                 const colonized = myEmpire?.colonizedPlanets.includes(planet.id);
+                const pendingCol = (myEmpire?.pendingColonizations ?? []).some(c => c.planetId === planet.id);
                 return (
                   <button
                     key={planet.id}
@@ -117,12 +161,61 @@ export default function SystemPanel() {
                         {planet.moons.length > 0 && ` • ${planet.moons.length}m`}
                         {planet.hasAnomaly && ' ★'}
                         {colonized && ' ●'}
+                        {pendingCol && ' ◐'}
                       </div>
                     </div>
                   </button>
                 );
               })}
             </div>
+          </div>
+        )}
+
+        {/* Ground Operations (controlled systems only) */}
+        {isMine && surveyed && system.planets.length > 0 && !system.isBlackHole && (
+          <div>
+            <div className="font-pixel text-[8px] text-[#3a5a6a] mb-2">GROUND OPERATIONS</div>
+
+            {/* Active/building ops */}
+            {myGroundOps.length > 0 && (
+              <div className="mb-2 flex flex-col gap-1">
+                {myGroundOps.map(op => {
+                  const cfg = GROUND_OP_CONFIG[op.type];
+                  return (
+                    <div key={op.id} className="flex items-center justify-between py-1 border-b border-[#0a1020] font-mono text-[10px]">
+                      <span className="text-[#6a8a6a]">{cfg.icon} {cfg.label}</span>
+                      <span className={op.active ? 'text-[#44aa44]' : 'text-[#aa8800]'}>
+                        {op.active ? 'ACTIVE' : `${Math.max(0, op.buildCompletedTick - (currentGame?.tick ?? 0))}t`}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* Build new op */}
+            {system.planets.length > 0 && (() => {
+              const firstPlanet = system.planets[0];
+              return GROUND_OPS.map(({ type, icon }) => {
+                const cfg = GROUND_OP_CONFIG[type];
+                const already = myGroundOps.some(g => g.targetId === firstPlanet.id && g.type === type);
+                const affordable = (myEmpire?.resources.minerals ?? 0) >= cfg.mineralCost &&
+                                   (myEmpire?.resources.credits  ?? 0) >= cfg.creditCost;
+                return (
+                  <button
+                    key={type}
+                    onClick={() => buildGroundOp(system.id, firstPlanet.id, type)}
+                    disabled={already || !affordable}
+                    className="w-full flex items-center justify-between px-2 py-1.5 border border-[#1a1a2a] bg-[#05050f] hover:border-[#2a3a3a] disabled:opacity-40 disabled:cursor-not-allowed mb-1 font-mono text-[9px]"
+                  >
+                    <span className="text-[#6a8a8a]">{icon} {cfg.label}</span>
+                    <span className="text-[#3a5a4a]">
+                      {cfg.mineralCost}m {cfg.creditCost}c
+                    </span>
+                  </button>
+                );
+              });
+            })()}
           </div>
         )}
       </div>

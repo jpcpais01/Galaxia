@@ -264,7 +264,9 @@ export default function GalaxyCanvas() {
       const isSel = ui.selectedSystemId === sys.id;
       const isHov = ui.hoverSystemId   === sys.id;
 
-      const starCfg = STAR_CONFIG[sys.stars[0]?.type ?? 'yellow'];
+      const isBlackHole = !!(sys.isBlackHole);
+      const starType = sys.stars[0]?.type ?? 'yellow';
+      const starCfg = STAR_CONFIG[starType] ?? STAR_CONFIG['yellow'];
       const baseR   = Math.max(3, Math.round(starCfg.baseRadius * 0.22 * Z));
       const px      = Math.round(sx);
       const py      = Math.round(sy);
@@ -392,37 +394,88 @@ export default function GalaxyCanvas() {
         ctx.globalAlpha = 1;
       }
 
-      /* ── Pixel-art star body ── */
-      const pr = Math.max(2, Math.round(baseR));
-      // Main square disc
-      ctx.fillStyle   = starCfg.color;
-      ctx.globalAlpha = 1;
-      ctx.fillRect(px - pr, py - pr, pr * 2, pr * 2);
+      /* ── Star body (normal or black hole) ── */
+      if (isBlackHole) {
+        /* ─ Black hole: accretion disk + event horizon ─ */
+        const diskR = Math.max(14, baseR * 4.5);
 
-      // 4-point pixel cross spikes
-      if (baseR >= 3) {
-        const sl = Math.round(pr * 2.6);
-        const sw = Math.max(1, Math.round(pr * 0.38));
-        ctx.globalAlpha = 0.82;
-        ctx.fillRect(px - sl, py - sw, sl * 2, sw * 2); // horizontal
-        ctx.fillRect(px - sw, py - sl, sw * 2, sl * 2); // vertical
-      }
+        // Outer accretion disk glow
+        ctx.save();
+        ctx.translate(px, py);
+        const diskRot = (t / 4000) % (Math.PI * 2);
+        ctx.rotate(diskRot);
+        const diskGlow = ctx.createRadialGradient(0, 0, baseR * 0.6, 0, 0, diskR);
+        diskGlow.addColorStop(0,    'rgba(255,80,0,0.9)');
+        diskGlow.addColorStop(0.25, 'rgba(200,40,0,0.6)');
+        diskGlow.addColorStop(0.55, 'rgba(120,10,0,0.3)');
+        diskGlow.addColorStop(1,    'transparent');
+        ctx.globalAlpha = 0.85;
+        ctx.fillStyle = diskGlow;
+        ctx.beginPath();
+        ctx.ellipse(0, 0, diskR, diskR * 0.3, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
 
-      // Diagonal secondary spikes (softer, for larger stars)
-      if (baseR >= 5) {
-        const dl = Math.round(pr * 1.6);
+        // Jet / lensing ring
+        const ringR = baseR * 2.8;
+        const ring  = ctx.createRadialGradient(px, py, ringR - 2, px, py, ringR + 4);
+        ring.addColorStop(0,   'rgba(255,100,30,0)');
+        ring.addColorStop(0.45,'rgba(255,120,30,0.55)');
+        ring.addColorStop(1,   'rgba(255,100,30,0)');
+        ctx.globalAlpha = 0.6;
+        ctx.fillStyle = ring;
+        ctx.beginPath();
+        ctx.arc(px, py, ringR + 4, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Event horizon (dark circle — absorbs everything)
+        ctx.globalAlpha = 1;
+        ctx.fillStyle = '#000000';
+        ctx.beginPath();
+        ctx.arc(px, py, baseR * 1.1, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Faint blue photon ring around horizon
+        ctx.strokeStyle = '#4488ff';
+        ctx.lineWidth   = 1;
         ctx.globalAlpha = 0.35;
-        ctx.fillRect(px - dl, py - dl, 2, 2);
-        ctx.fillRect(px + dl - 1, py - dl, 2, 2);
-        ctx.fillRect(px - dl, py + dl - 1, 2, 2);
-        ctx.fillRect(px + dl - 1, py + dl - 1, 2, 2);
-      }
+        ctx.beginPath();
+        ctx.arc(px, py, baseR * 1.25, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.globalAlpha = 1;
 
-      // Bright hot centre pixel
-      ctx.fillStyle   = '#ffffff';
-      ctx.globalAlpha = 0.95;
-      ctx.fillRect(px - 1, py - 1, 2, 2);
-      ctx.globalAlpha = 1;
+      } else {
+        /* ─ Normal pixel-art star body ─ */
+        const pr = Math.max(2, Math.round(baseR));
+        ctx.fillStyle   = starCfg.color;
+        ctx.globalAlpha = 1;
+        ctx.fillRect(px - pr, py - pr, pr * 2, pr * 2);
+
+        // 4-point pixel cross spikes
+        if (baseR >= 3) {
+          const sl = Math.round(pr * 2.6);
+          const sw = Math.max(1, Math.round(pr * 0.38));
+          ctx.globalAlpha = 0.82;
+          ctx.fillRect(px - sl, py - sw, sl * 2, sw * 2);
+          ctx.fillRect(px - sw, py - sl, sw * 2, sl * 2);
+        }
+
+        // Diagonal secondary spikes
+        if (baseR >= 5) {
+          const dl = Math.round(pr * 1.6);
+          ctx.globalAlpha = 0.35;
+          ctx.fillRect(px - dl, py - dl, 2, 2);
+          ctx.fillRect(px + dl - 1, py - dl, 2, 2);
+          ctx.fillRect(px - dl, py + dl - 1, 2, 2);
+          ctx.fillRect(px + dl - 1, py + dl - 1, 2, 2);
+        }
+
+        // Bright hot centre pixel
+        ctx.fillStyle   = '#ffffff';
+        ctx.globalAlpha = 0.95;
+        ctx.fillRect(px - 1, py - 1, 2, 2);
+        ctx.globalAlpha = 1;
+      }
 
       /* ── System label ── */
       if (Z > 0.44 || isSel || isHov) {

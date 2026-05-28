@@ -1,5 +1,5 @@
 import type { Empire, Resources, Infrastructure } from '@/types/game';
-import { INFRA_CONFIG, STATION_CONFIG } from './constants';
+import { INFRA_CONFIG, STATION_CONFIG, GROUND_OP_CONFIG } from './constants';
 import { RESEARCH_BY_ID } from './research-tree';
 
 export function computeResourceRates(empire: Empire, currentTick = 0): Resources {
@@ -20,6 +20,16 @@ export function computeResourceRates(empire: Empire, currentTick = 0): Resources
     const cfg = INFRA_CONFIG[infra.type];
     const out = cfg.output;
     for (const [key, val] of Object.entries(out) as [keyof Resources, number][]) {
+      const bonus = 1 + (resourceBonuses[key] ?? 0) / 100;
+      rates[key] = (rates[key] || 0) + val * bonus;
+    }
+  }
+
+  // Active ground operations
+  for (const op of (empire.groundOps ?? [])) {
+    if (!op.active) continue;
+    const cfg = GROUND_OP_CONFIG[op.type];
+    for (const [key, val] of Object.entries(cfg.output) as [keyof Resources, number][]) {
       const bonus = 1 + (resourceBonuses[key] ?? 0) / 100;
       rates[key] = (rates[key] || 0) + val * bonus;
     }
@@ -88,6 +98,28 @@ export function applyTick(empire: Empire, currentTick: number): Partial<Empire> 
     active: infra.buildCompletedTick <= currentTick,
   }));
 
+  // Mark ground ops as active when build completes
+  const updatedGroundOps = (empire.groundOps ?? []).map(op => ({
+    ...op,
+    active: op.buildCompletedTick <= currentTick,
+  }));
+
+  // Process pending surveys → surveyedSystems
+  const completedSurveys = (empire.pendingSurveys ?? []).filter(s => s.completesAtTick <= currentTick);
+  const remainingPendingSurveys = (empire.pendingSurveys ?? []).filter(s => s.completesAtTick > currentTick);
+  const newSurveyedSystems = Array.from(new Set([
+    ...empire.surveyedSystems,
+    ...completedSurveys.map(s => s.systemId),
+  ]));
+
+  // Process pending colonizations → colonizedPlanets
+  const completedColonizations = (empire.pendingColonizations ?? []).filter(c => c.completesAtTick <= currentTick);
+  const remainingPendingColonizations = (empire.pendingColonizations ?? []).filter(c => c.completesAtTick > currentTick);
+  const newColonizedPlanets = Array.from(new Set([
+    ...empire.colonizedPlanets,
+    ...completedColonizations.map(c => c.planetId),
+  ]));
+
   // Advance research
   let researchProgress = empire.researchProgress;
   let researchQueue = empire.researchQueue;
@@ -110,6 +142,11 @@ export function applyTick(empire: Empire, currentTick: number): Partial<Empire> 
     resources: newResources,
     resourceRates: rates,
     infrastructure: updatedInfra,
+    groundOps: updatedGroundOps,
+    surveyedSystems: newSurveyedSystems,
+    pendingSurveys: remainingPendingSurveys,
+    colonizedPlanets: newColonizedPlanets,
+    pendingColonizations: remainingPendingColonizations,
     researchProgress,
     researchQueue,
     completedResearch,

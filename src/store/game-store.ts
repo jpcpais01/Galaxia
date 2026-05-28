@@ -7,12 +7,13 @@ import {
 import { db } from '@/lib/firebase';
 import type {
   GameMeta, Empire, GameEvent, UIState, SystemState,
-  InfraType, StationType, Resources,
+  InfraType, StationType, GroundOpType, Resources,
+  PendingSurvey, PendingColonization,
 } from '@/types/game';
 import { generateGalaxy, findHomeSystem } from '@/lib/game/galaxy-generator';
 import { createBotEmpire, decideBotAction } from '@/lib/game/bot-ai';
 import { applyTick, canAfford, deductCosts, countUsedSlots } from '@/lib/game/economy';
-import { INFRA_CONFIG, STATION_CONFIG, EMPIRE_COLORS, STARTING_RESOURCES, GAME_TICK_MS } from '@/lib/game/constants';
+import { INFRA_CONFIG, STATION_CONFIG, GROUND_OP_CONFIG, EMPIRE_COLORS, STARTING_RESOURCES, GAME_TICK_MS, SYSTEM_COUNT } from '@/lib/game/constants';
 import { STARTER_DESIGNS } from '@/lib/game/ship-designer';
 import { SeededRandom } from '@/lib/noise';
 
@@ -20,7 +21,7 @@ interface GameStore {
   // Lobby
   games: GameMeta[];
   loadGames: () => Promise<void>;
-  createGame: (name: string, maxPlayers: number, botCount: number, hostPlayerId: string, hostUsername: string) => Promise<string>;
+  createGame: (name: string, maxPlayers: number, botCount: number, hostPlayerId: string, hostUsername: string, starCount?: number) => Promise<string>;
   joinGame: (gameId: string, playerId: string, username: string, color: string) => Promise<void>;
   startGame: (gameId: string) => Promise<void>;
 
@@ -50,6 +51,7 @@ interface GameStore {
   buildInfra:     (systemId: string, planetId: string, type: InfraType) => Promise<void>;
   startResearch:  (nodeId: string) => Promise<void>;
   buildShip:      (designId: string, systemId: string) => Promise<void>;
+  buildGroundOp:  (systemId: string, targetId: string, type: GroundOpType) => Promise<void>;
   saveShipDesign: (design: Empire['shipDesigns'][0]) => Promise<void>;
   proposeDiplomacy: (targetEmpireId: string, status: string) => Promise<void>;
   acceptDiplomacy:  (targetEmpireId: string) => Promise<void>;
@@ -86,9 +88,9 @@ export const useGameStore = create<GameStore>((set, get) => ({
     set({ games });
   },
 
-  createGame: async (name, maxPlayers, botCount, hostPlayerId, hostUsername) => {
+  createGame: async (name, maxPlayers, botCount, hostPlayerId, hostUsername, starCount = SYSTEM_COUNT) => {
     const seed = Math.floor(Math.random() * 99999) + 1;
-    const galaxy = generateGalaxy(seed);
+    const galaxy = generateGalaxy(seed, starCount);
 
     const gameId        = `game_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
     const hostEmpireId  = `empire_${hostPlayerId}`;
@@ -96,6 +98,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const homeSystem    = galaxy.systems.find(s => s.id === homeId)!;
     const homePlanet    = homeSystem.planets.filter(p => p.colonizable).sort((a, b) => b.similarity - a.similarity)[0] ?? null;
     const homeStation   = { id: `stn_home_${hostEmpireId}`, type: 'space_station' as StationType, systemId: homeId, level: 1, ownerId: hostEmpireId, buildStartedTick: 0, buildCompletedTick: 0 };
+    const startPop      = homePlanet ? 10 + (homePlanet.size - 1) * 2 : 10;
 
     const systemStates: Record<string, SystemState> = {};
     for (const sys of galaxy.systems) {
@@ -108,7 +111,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       createdBy: hostPlayerId, createdByUsername: hostUsername,
       createdAt: Date.now(), maxPlayers, botCount,
       currentPlayers: 1, tick: 0, lastTickTime: Date.now(),
-      seed, galaxy, systemStates, assembly: [],
+      seed, starCount, galaxy, systemStates, assembly: [],
     };
 
     const { galaxy: _g, ...gameDoc } = game;
@@ -121,11 +124,12 @@ export const useGameStore = create<GameStore>((set, get) => ({
       color: EMPIRE_COLORS[0],
       isBot: false,
       homeSystemId: homeId,
-      resources: { ...STARTING_RESOURCES },
+      resources: { ...STARTING_RESOURCES, population: startPop },
       resourceRates: { energy: 5, food: 0, minerals: 0, research: 5, compute: 0, credits: 10, population: 0 },
       controlledSystems: [homeId],
       colonizedPlanets: homePlanet ? [homePlanet.id] : [],
       infrastructure: [],
+      groundOps: [],
       stations: [homeStation],
       ships: [],
       shipDesigns: STARTER_DESIGNS.map((d, i) => ({ ...d, id: `design_${hostPlayerId}_${i}` })),
@@ -134,6 +138,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
       researchProgress: 0,
       diplomacy: [],
       surveyedSystems: [homeId],
+      pendingSurveys: [],
+      pendingColonizations: [],
       isOnline: true,
       lastSeen: Date.now(),
       score: 0,
@@ -145,8 +151,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
   joinGame: async (gameId, playerId, username, color) => {
     const snap = await getDoc(doc(db, 'games', gameId));
-    const rawGame = snap.data() as Omit<GameMeta, 'galaxy'> & { seed: number };
-    const galaxy = generateGalaxy(rawGame.seed);
+    const rawGame = snap.data() as Omit<GameMeta, 'galaxy'> & { seed: number; starCount?: number };
+    const galaxy = generateGalaxy(rawGame.seed, rawGame.starCount ?? SYSTEM_COUNT);
 
     const existingEmpires = await getDocs(collection(db, 'games', gameId, 'empires'));
     // Idempotent: if this player already has an empire, do nothing
@@ -158,6 +164,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const homePlanet  = homeSystem.planets.filter(p => p.colonizable).sort((a, b) => b.similarity - a.similarity)[0] ?? null;
     const empireId    = `empire_${playerId}`;
     const homeStation = { id: `stn_home_${empireId}`, type: 'space_station' as StationType, systemId: homeId, level: 1, ownerId: empireId, buildStartedTick: 0, buildCompletedTick: 0 };
+    const startPop    = homePlanet ? 10 + (homePlanet.size - 1) * 2 : 10;
 
     const empire: Empire = {
       id: empireId,
@@ -166,11 +173,12 @@ export const useGameStore = create<GameStore>((set, get) => ({
       color,
       isBot: false,
       homeSystemId: homeId,
-      resources: { ...STARTING_RESOURCES },
+      resources: { ...STARTING_RESOURCES, population: startPop },
       resourceRates: { energy: 5, food: 0, minerals: 0, research: 5, compute: 0, credits: 10, population: 0 },
       controlledSystems: [homeId],
       colonizedPlanets: homePlanet ? [homePlanet.id] : [],
       infrastructure: [],
+      groundOps: [],
       stations: [homeStation],
       ships: [],
       shipDesigns: STARTER_DESIGNS.map((d, i) => ({ ...d, id: `design_${playerId}_${i}` })),
@@ -179,6 +187,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
       researchProgress: 0,
       diplomacy: [],
       surveyedSystems: [homeId],
+      pendingSurveys: [],
+      pendingColonizations: [],
       isOnline: true,
       lastSeen: Date.now(),
       score: 0,
@@ -194,8 +204,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
   startGame: async (gameId) => {
     const snap = await getDoc(doc(db, 'games', gameId));
-    const rawGame = snap.data() as Omit<GameMeta, 'galaxy'> & { seed: number };
-    const game: GameMeta = { ...rawGame, galaxy: generateGalaxy(rawGame.seed) };
+    const rawGame = snap.data() as Omit<GameMeta, 'galaxy'> & { seed: number; starCount?: number };
+    const game: GameMeta = { ...rawGame, galaxy: generateGalaxy(rawGame.seed, rawGame.starCount ?? SYSTEM_COUNT) };
     const empireSnap = await getDocs(collection(db, 'games', gameId, 'empires'));
     const existingCount = empireSnap.size;
 
@@ -208,12 +218,17 @@ export const useGameStore = create<GameStore>((set, get) => ({
       const homeStation = { id: `stn_home_${botId}`, type: 'space_station' as StationType, systemId: homeId, level: 1, ownerId: botId, buildStartedTick: 0, buildCompletedTick: 0 };
 
       const botData = createBotEmpire(i, homeId, existingCount + game.botCount);
+      const botStartPop = homePlanet ? 10 + (homePlanet.size - 1) * 2 : 10;
       const bot: Empire = {
         ...botData,
         id: botId,
+        resources: { ...botData.resources, population: botStartPop },
         controlledSystems: [homeId],
         colonizedPlanets: homePlanet ? [homePlanet.id] : [],
         stations: [homeStation],
+        groundOps: [],
+        pendingSurveys: [],
+        pendingColonizations: [],
       };
       bots.push(bot);
       await setDoc(doc(db, 'games', gameId, 'empires', bot.id), bot);
@@ -236,10 +251,10 @@ export const useGameStore = create<GameStore>((set, get) => ({
     let cachedGalaxy: import('@/types/game').GalaxyData | null = null;
     const gameSub = onSnapshot(doc(db, 'games', gameId), snap => {
       if (!snap.exists()) return;
-      const raw = snap.data() as Omit<GameMeta, 'galaxy'> & { seed: number };
+      const raw = snap.data() as Omit<GameMeta, 'galaxy'> & { seed: number; starCount?: number };
       // Generate galaxy once and reuse — it never changes
       if (!cachedGalaxy || cachedGalaxy.seed !== raw.seed) {
-        cachedGalaxy = generateGalaxy(raw.seed);
+        cachedGalaxy = generateGalaxy(raw.seed, raw.starCount ?? SYSTEM_COUNT);
       }
       set({ currentGame: { ...raw, galaxy: cachedGalaxy } });
     });
@@ -288,18 +303,27 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const { currentGame, myEmpire } = get();
     if (!currentGame || !myEmpire) return;
     if (myEmpire.surveyedSystems.includes(systemId)) return;
+    if ((myEmpire.pendingSurveys ?? []).some(s => s.systemId === systemId)) return;
 
-    const updated = { surveyedSystems: [...myEmpire.surveyedSystems, systemId] };
-    await updateDoc(doc(db, 'games', currentGame.id, 'empires', myEmpire.id), updated);
+    // Must be adjacent to an already-surveyed system
+    const targetSystem = currentGame.galaxy.systems.find(s => s.id === systemId);
+    if (!targetSystem) return;
+    const hasAdjacentSurveyed = targetSystem.connections.some(
+      id => myEmpire.surveyedSystems.includes(id)
+    );
+    if (!hasAdjacentSurveyed) return;
 
-    const stateRef = doc(db, 'games', currentGame.id);
-    await updateDoc(stateRef, {
-      [`systemStates.${systemId}.surveyedBy`]: arrayUnion(myEmpire.id),
+    const pendingSurvey: PendingSurvey = {
+      systemId,
+      completesAtTick: currentGame.tick + 20,
+    };
+    await updateDoc(doc(db, 'games', currentGame.id, 'empires', myEmpire.id), {
+      pendingSurveys: [...(myEmpire.pendingSurveys ?? []), pendingSurvey],
     });
 
     await addDoc(collection(db, 'games', currentGame.id, 'events'), {
       id: `evt_${Date.now()}`, type: 'survey',
-      message: `${myEmpire.username} surveyed system ${systemId}`,
+      message: `${myEmpire.username} dispatched surveyors to ${targetSystem.name}`,
       tick: currentGame.tick, empireId: myEmpire.id, systemId,
     });
   },
@@ -350,6 +374,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     if (!currentGame || !myEmpire) return;
     if (!myEmpire.controlledSystems.includes(systemId)) return;
     if (myEmpire.colonizedPlanets.includes(planetId)) return;
+    if ((myEmpire.pendingColonizations ?? []).some(c => c.planetId === planetId)) return;
     if (myEmpire.resources.credits < 150) return;
 
     const planet = currentGame.galaxy.systems
@@ -357,17 +382,20 @@ export const useGameStore = create<GameStore>((set, get) => ({
       .find(p => p.id === planetId);
     if (!planet?.colonizable) return;
 
-    const newColonized = [...myEmpire.colonizedPlanets, planetId];
     const newResources = { ...myEmpire.resources, credits: myEmpire.resources.credits - 150 };
+    const pending: PendingColonization = {
+      planetId, systemId,
+      completesAtTick: currentGame.tick + 50,
+    };
 
     await updateDoc(doc(db, 'games', currentGame.id, 'empires', myEmpire.id), {
-      colonizedPlanets: newColonized,
       resources: newResources,
+      pendingColonizations: [...(myEmpire.pendingColonizations ?? []), pending],
     });
 
     await addDoc(collection(db, 'games', currentGame.id, 'events'), {
       id: `evt_${Date.now()}`, type: 'colonize',
-      message: `${myEmpire.username} colonized ${planet.name}`,
+      message: `${myEmpire.username} dispatched colony ships to ${planet.name}`,
       tick: currentGame.tick, empireId: myEmpire.id, systemId, planetId,
     });
   },
@@ -400,6 +428,32 @@ export const useGameStore = create<GameStore>((set, get) => ({
     await updateDoc(doc(db, 'games', currentGame.id, 'empires', myEmpire.id), {
       resources: newResources,
       infrastructure: [...myEmpire.infrastructure, infra],
+    });
+  },
+
+  buildGroundOp: async (systemId, targetId, type) => {
+    const { currentGame, myEmpire } = get();
+    if (!currentGame || !myEmpire) return;
+    if (!myEmpire.controlledSystems.includes(systemId)) return;
+
+    const cfg = GROUND_OP_CONFIG[type];
+    if (!canAfford(myEmpire.resources, cfg)) return;
+
+    // One op of each type per target
+    if ((myEmpire.groundOps ?? []).some(g => g.targetId === targetId && g.type === type)) return;
+
+    const newResources = deductCosts(myEmpire.resources, cfg);
+    const groundOp = {
+      id: `gop_${Date.now()}`,
+      type, targetId, systemId,
+      buildStartedTick: currentGame.tick,
+      buildCompletedTick: currentGame.tick + cfg.buildTicks,
+      active: false,
+    };
+
+    await updateDoc(doc(db, 'games', currentGame.id, 'empires', myEmpire.id), {
+      resources: newResources,
+      groundOps: [...(myEmpire.groundOps ?? []), groundOp],
     });
   },
 
@@ -569,6 +623,17 @@ export const useGameStore = create<GameStore>((set, get) => ({
     for (const empire of empires) {
       const updates = applyTick(empire, newTick);
       await updateDoc(doc(db, 'games', currentGame.id, 'empires', empire.id), updates);
+
+      // Push newly completed surveys to game-level systemStates
+      const oldSurveyed = empire.surveyedSystems ?? [];
+      const newSurveyed = (updates as any).surveyedSystems ?? oldSurveyed;
+      for (const sysId of newSurveyed) {
+        if (!oldSurveyed.includes(sysId)) {
+          await updateDoc(doc(db, 'games', currentGame.id), {
+            [`systemStates.${sysId}.surveyedBy`]: arrayUnion(empire.id),
+          });
+        }
+      }
 
       if (empire.isBot && newTick % 2 === 0) {
         const action = decideBotAction({ ...empire, ...updates } as Empire, currentGame, newTick);

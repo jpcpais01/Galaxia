@@ -1,4 +1,4 @@
-import type { PlanetType, StarType, InfraType, StationType, Resources } from '@/types/game';
+import type { PlanetType, StarType, InfraType, StationType, GroundOpType, Resources } from '@/types/game';
 
 export const GAME_TICK_MS = 6000;
 export const BOT_THINK_EVERY_N_TICKS = 2;
@@ -59,6 +59,7 @@ export const STAR_CONFIG: Record<StarType, {
   orange:      { color: '#FF8844', glowColor: '#CC5500', baseRadius: 22, label: 'Orange Star' },
   white_dwarf: { color: '#EEEEFF', glowColor: '#AAAACC', baseRadius: 12, label: 'White Dwarf' },
   neutron:     { color: '#AAEEFF', glowColor: '#00CCFF', baseRadius: 10, label: 'Neutron Star' },
+  black_hole:  { color: '#220011', glowColor: '#ff3300', baseRadius: 18, label: 'Black Hole' },
 };
 
 export const INFRA_CONFIG: Record<InfraType, {
@@ -91,11 +92,26 @@ export const STATION_CONFIG: Record<StationType, {
   creditCost: number;
   icon: string;
 }> = {
-  space_station:    { label: 'Space Station',    buildTicks: 30, mineralCost: 300, energyCost: 0,  creditCost: 200, icon: '🛰' },
+  space_station:    { label: 'Space Station',    buildTicks: 50, mineralCost: 300, energyCost: 0,  creditCost: 200, icon: '🛰' },
   mining_station:   { label: 'Mining Station',   buildTicks: 20, mineralCost: 200, energyCost: 0,  creditCost: 100, icon: '⛏' },
   military_outpost: { label: 'Military Outpost', buildTicks: 40, mineralCost: 400, energyCost: 40, creditCost: 250, icon: '🔫' },
   research_station: { label: 'Research Station', buildTicks: 35, mineralCost: 350, energyCost: 30, creditCost: 200, icon: '🔭' },
   stargate:         { label: 'Stargate',         buildTicks: 100, mineralCost: 1000, energyCost: 200, creditCost: 800, icon: '🌀' },
+};
+
+export const GROUND_OP_CONFIG: Record<GroundOpType, {
+  label: string;
+  buildTicks: number;
+  mineralCost: number;
+  energyCost: number;
+  creditCost: number;
+  output: Partial<Resources>;
+  icon: string;
+  description: string;
+}> = {
+  mineral_extractor:     { label: 'Mineral Extractor',  buildTicks: 10, mineralCost: 40,  energyCost: 5,  creditCost: 20, output: { minerals: 8 },           icon: '⛏',  description: 'Extracts mineral deposits without colonization' },
+  atmospheric_processor: { label: 'Atmo Processor',     buildTicks: 15, mineralCost: 60,  energyCost: 10, creditCost: 35, output: { energy: 8, credits: 4 }, icon: '🌫', description: 'Harvests atmospheric gases for energy and trade' },
+  deep_scanner:          { label: 'Deep Scanner',       buildTicks: 8,  mineralCost: 50,  energyCost: 8,  creditCost: 30, output: { research: 6 },            icon: '📡', description: 'Scans the planetary core for research data' },
 };
 
 export const EMPIRE_COLORS = [

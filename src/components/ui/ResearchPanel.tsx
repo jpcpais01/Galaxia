@@ -4,11 +4,10 @@ import { RESEARCH_BY_PATH } from '@/lib/game/research-tree';
 import type { ResearchPath } from '@/types/game';
 
 const PATH_CONFIG: Record<ResearchPath, { label: string; color: string; icon: string }> = {
-  physics:      { label: 'Physics',      color: '#4488ff', icon: '⚛' },
-  biology:      { label: 'Biology',      color: '#44cc44', icon: '🧬' },
-  engineering:  { label: 'Engineering',  color: '#ff8844', icon: '⚙' },
-  ai:           { label: 'Artificial Intelligence', color: '#aa44ff', icon: '🤖' },
-  spirituality: { label: 'Spirituality', color: '#ffaa00', icon: '✦' },
+  physics:     { label: 'Physics',               color: '#4488ff', icon: '⚛' },
+  biology:     { label: 'Biology',               color: '#44cc44', icon: '🧬' },
+  engineering: { label: 'Engineering',           color: '#ff8844', icon: '⚙' },
+  ai:          { label: 'Artificial Intelligence', color: '#aa44ff', icon: '🤖' },
 };
 
 const PATHS = Object.keys(PATH_CONFIG) as ResearchPath[];

@@ -10,15 +10,16 @@ function CreateGameModal({ onClose }: { onClose: () => void }) {
   const { player } = useAuthStore();
   const { createGame } = useGameStore();
   const router = useRouter();
-  const [name, setName]     = useState(`${player?.username ?? 'Commander'}'s Galaxy`);
-  const [maxP, setMaxP]     = useState(4);
-  const [bots, setBots]     = useState(4);
+  const [name, setName]       = useState(`${player?.username ?? 'Commander'}'s Galaxy`);
+  const [maxP, setMaxP]       = useState(4);
+  const [bots, setBots]       = useState(4);
+  const [stars, setStars]     = useState(100);
   const [loading, setLoading] = useState(false);
 
   const create = async () => {
     if (!player) return;
     setLoading(true);
-    const id = await createGame(name, maxP, bots, player.id, player.username);
+    const id = await createGame(name, maxP, bots, player.id, player.username, stars);
     router.push(`/game/${id}`);
   };
 
@@ -36,7 +37,7 @@ function CreateGameModal({ onClose }: { onClose: () => void }) {
           />
         </div>
 
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-3 gap-3">
           <div className="flex flex-col gap-1">
             <label className="font-pixel text-[9px] text-[#5a7a8a]">MAX PLAYERS</label>
             <select
@@ -58,10 +59,22 @@ function CreateGameModal({ onClose }: { onClose: () => void }) {
               {Array.from({ length: 21 }, (_, i) => <option key={i} value={i}>{i}</option>)}
             </select>
           </div>
+
+          <div className="flex flex-col gap-1">
+            <label className="font-pixel text-[9px] text-[#5a7a8a]">GALAXY SIZE</label>
+            <select
+              value={stars}
+              onChange={e => setStars(+e.target.value)}
+              className="bg-[#050510] border border-[#1a2a3a] text-[#c0d0e0] font-mono text-sm px-2 py-2 focus:outline-none focus:border-accent-cyan"
+            >
+              <option value={100}>100 stars</option>
+              <option value={200}>200 stars</option>
+            </select>
+          </div>
         </div>
 
         <div className="font-mono text-[11px] text-[#5a7a8a] bg-[#050510] border border-[#1a1a2a] px-3 py-2">
-          Galaxy: 100 star systems • {maxP + bots} empires total
+          Galaxy: {stars} star systems • {maxP + bots} empires total
         </div>
 
         <div className="flex gap-3">

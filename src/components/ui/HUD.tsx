@@ -157,6 +157,7 @@ export default function HUD({ children }: { children: React.ReactNode }) {
       case 'diplomacy': return <DiplomacyPanel />;
       case 'assembly':  return <AssemblyPanel />;
       case 'build':     return <BuildMenu />;
+      case 'none':
       default:          return ui.selectedPlanetId ? <PlanetPanel /> : <SystemPanel />;
     }
   };
