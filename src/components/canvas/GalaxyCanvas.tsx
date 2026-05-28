@@ -153,7 +153,7 @@ export default function GalaxyCanvas() {
       const state = systemStates[sys.id];
       const owner = state?.ownerId ? empires.find(e => e.id === state.ownerId) : null;
       const myEmpire = empires.find(e => e.playerId === user?.uid);
-      const surveyed = state?.surveyedBy?.includes(myEmpire?.id ?? '') ?? false;
+      const surveyed = myEmpire?.surveyedSystems.includes(sys.id) ?? false;
       const isSelected = ui.selectedSystemId === sys.id;
       const isHovered  = ui.hoverSystemId === sys.id;
 

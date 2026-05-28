@@ -15,7 +15,7 @@ export default function SystemPanel() {
   const state = currentGame?.systemStates[system.id];
   const owner = state?.ownerId ? empires.find(e => e.id === state.ownerId) : null;
   const isMine = owner?.id === myEmpire?.id;
-  const surveyed = state?.surveyedBy?.includes(myEmpire?.id ?? '') ?? false;
+  const surveyed = myEmpire?.surveyedSystems.includes(system.id) ?? false;
   const canSurvey = myEmpire && !surveyed;
   const canClaim = myEmpire && surveyed && !state?.ownerId;
   const canAffordStation = (myEmpire?.resources.minerals ?? 0) >= 300 && (myEmpire?.resources.credits ?? 0) >= 200;

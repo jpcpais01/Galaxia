@@ -89,7 +89,14 @@ function GameCard({ game }: { game: GameMeta }) {
     router.push(`/game/${game.id}`);
   };
 
-  const enter = () => router.push(`/game/${game.id}`);
+  // Also ensures the player has an empire before entering a live game
+  const enter = async () => {
+    if (!player) return;
+    setJoining(true);
+    const color = EMPIRE_COLORS[game.currentPlayers % EMPIRE_COLORS.length];
+    await joinGame(game.id, player.id, player.username, color);
+    router.push(`/game/${game.id}`);
+  };
 
   const statusColor = game.status === 'lobby' ? '#ffaa00' : game.status === 'playing' ? '#00ff88' : '#5a6a7a';
   const statusLabel = game.status.toUpperCase();
@@ -120,8 +127,8 @@ function GameCard({ game }: { game: GameMeta }) {
         </button>
       )}
       {game.status === 'playing' && (
-        <button onClick={enter} className="btn-green text-[9px] w-full py-2">
-          ENTER GAME
+        <button onClick={enter} disabled={joining} className="btn-green text-[9px] w-full py-2">
+          {joining ? 'ENTERING...' : 'ENTER GAME'}
         </button>
       )}
     </div>

@@ -141,11 +141,15 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
   joinGame: async (gameId, playerId, username, color) => {
     const snap = await getDoc(doc(db, 'games', gameId));
-    const game = snap.data() as GameMeta;
+    const rawGame = snap.data() as Omit<GameMeta, 'galaxy'> & { seed: number };
+    const galaxy = generateGalaxy(rawGame.seed);
+
     const existingEmpires = await getDocs(collection(db, 'games', gameId, 'empires'));
+    // Idempotent: if this player already has an empire, do nothing
+    if (existingEmpires.docs.some(d => d.data().playerId === playerId)) return;
     const count = existingEmpires.size;
 
-    const homeId = findHomeSystem(game.galaxy, count);
+    const homeId = findHomeSystem(galaxy, count);
     const empire: Empire = {
       id: `empire_${playerId}`,
       playerId,
