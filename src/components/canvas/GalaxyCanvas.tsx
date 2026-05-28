@@ -111,17 +111,22 @@ export default function GalaxyCanvas() {
     ctx.fillStyle = bg;
     ctx.fillRect(0, 0, CW, CH);
 
-    /* ── 2. Galaxy circular boundary (dark ring beyond the rim) ── */
+    /* ── 2. Galaxy fade-out — seamless, no hard border ──────────── */
     {
       const { sx: gcx, sy: gcy } = w2s(GCX, GCY, CW, CH);
-      const rInner = GR * Z;
-      const rOuter = (GR + 320) * Z;
-      const rim = ctx.createRadialGradient(gcx, gcy, rInner * 0.88, gcx, gcy, rOuter);
-      rim.addColorStop(0,    'transparent');
-      rim.addColorStop(0.25, '#01010844');
-      rim.addColorStop(0.6,  '#01010888');
-      rim.addColorStop(1,    '#000005ee');
-      ctx.fillStyle = rim;
+      // Gradient starts from galaxy centre (r=0) so there is no
+      // visible inner edge — darkness increases so gradually that
+      // the circular boundary is invisible.
+      const rOuter = (GR + 700) * Z;
+      const fade = ctx.createRadialGradient(gcx, gcy, 0, gcx, gcy, rOuter);
+      fade.addColorStop(0,    'transparent');
+      fade.addColorStop(0.45, 'transparent');
+      fade.addColorStop(0.62, '#00000415');
+      fade.addColorStop(0.75, '#00000540');
+      fade.addColorStop(0.86, '#00000680');
+      fade.addColorStop(0.94, '#000007bb');
+      fade.addColorStop(1,    '#000008ee');
+      ctx.fillStyle = fade;
       ctx.beginPath();
       ctx.arc(gcx, gcy, rOuter, 0, Math.PI * 2);
       ctx.fill();
