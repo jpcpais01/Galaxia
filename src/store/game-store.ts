@@ -71,9 +71,9 @@ const DEFAULT_UI: UIState = {
   selectedPlanetId: null,
   activePanel: 'none',
   hoverSystemId: null,
-  cameraX: 1000,   // galaxy center (GALAXY_WIDTH / 2)
-  cameraY: 1000,   // galaxy center (GALAXY_HEIGHT / 2)
-  cameraZoom: 0.5, // zoomed out enough to see the full galaxy on entry
+  cameraX: 2000,    // galaxy center (GALAXY_WIDTH  / 2)
+  cameraY: 2000,    // galaxy center (GALAXY_HEIGHT / 2)
+  cameraZoom: 0.25, // zoomed out to see the full 4000-unit galaxy on entry
 };
 
 export const useGameStore = create<GameStore>((set, get) => ({
@@ -369,16 +369,17 @@ export const useGameStore = create<GameStore>((set, get) => ({
     };
 
     const updatedStations = [...myEmpire.stations, station];
-    const updatedSystems = Array.from(new Set([...myEmpire.controlledSystems, systemId]));
 
+    // Don't claim the system yet — it becomes controlled when the station finishes
+    // building (processTick watches for buildCompletedTick). We do reserve the
+    // slot immediately so nobody else can start building here.
     await updateDoc(doc(db, 'games', currentGame.id, 'empires', myEmpire.id), {
       resources: newResources,
       stations: updatedStations,
-      controlledSystems: updatedSystems,
     });
 
     await updateDoc(doc(db, 'games', currentGame.id), {
-      [`systemStates.${systemId}.ownerId`]: myEmpire.id,
+      // stationId reserves the system; ownerId is set when construction completes
       [`systemStates.${systemId}.stationId`]: station.id,
     });
 
@@ -673,6 +674,25 @@ export const useGameStore = create<GameStore>((set, get) => ({
         }
       }
 
+      // Claim systems for stations that just finished building this tick
+      const newlyBuiltStations = empire.stations.filter(
+        s => s.buildCompletedTick === newTick
+      );
+      if (newlyBuiltStations.length > 0) {
+        const newControlled = Array.from(new Set([
+          ...empire.controlledSystems,
+          ...newlyBuiltStations.map(s => s.systemId),
+        ]));
+        await updateDoc(doc(db, 'games', currentGame.id, 'empires', empire.id), {
+          controlledSystems: newControlled,
+        });
+        for (const stn of newlyBuiltStations) {
+          await updateDoc(doc(db, 'games', currentGame.id), {
+            [`systemStates.${stn.systemId}.ownerId`]: empire.id,
+          });
+        }
+      }
+
       if (empire.isBot && newTick % 2 === 0) {
         const action = decideBotAction({ ...empire, ...updates } as Empire, currentGame, newTick);
         await executeBotAction(action, { ...empire, ...updates } as Empire, currentGame, newTick);
@@ -701,7 +721,7 @@ async function executeBotAction(action: ReturnType<typeof decideBotAction>, empi
       const cfg = STATION_CONFIG.space_station;
       if (!canAfford(empire.resources, cfg)) break;
       const state = game.systemStates[systemId];
-      if (state?.ownerId) break;
+      if (state?.ownerId || state?.stationId) break; // already owned or being built
 
       const station = {
         id: `station_${Date.now()}_${empire.id}`,
@@ -710,13 +730,12 @@ async function executeBotAction(action: ReturnType<typeof decideBotAction>, empi
         buildStartedTick: tick, buildCompletedTick: tick + cfg.buildTicks,
       };
       const newResources = deductCosts(empire.resources, cfg);
+      // Reserve slot; ownership is granted when construction completes (in processTick)
       await updateDoc(empireRef, {
         resources: newResources,
         stations: [...empire.stations, station],
-        controlledSystems: Array.from(new Set([...empire.controlledSystems, systemId])),
       });
       await updateDoc(doc(db, 'games', game.id), {
-        [`systemStates.${systemId}.ownerId`]: empire.id,
         [`systemStates.${systemId}.stationId`]: station.id,
       });
       break;

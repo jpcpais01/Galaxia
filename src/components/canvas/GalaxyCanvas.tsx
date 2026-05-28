@@ -10,9 +10,9 @@ interface BgStar { x: number; y: number; r: number; a: number; phase: number; }
 interface Nebula  { x: number; y: number; rx: number; ry: number; rot: number; c1: string; c2: string; a: number; }
 
 /* ─── Galaxy world-space constants ───────────────────────────────── */
-const GCX = 1000; // galaxy center X  (GALAXY_WIDTH  / 2)
-const GCY = 1000; // galaxy center Y  (GALAXY_HEIGHT / 2)
-const GR  = 850;  // galaxy radius
+const GCX = 2000; // galaxy center X  (GALAXY_WIDTH  / 2)
+const GCY = 2000; // galaxy center Y  (GALAXY_HEIGHT / 2)
+const GR  = 1850; // galaxy radius  (GALAXY_WIDTH/2 - 150)
 
 /* ─── Scene generators ───────────────────────────────────────────── */
 // Background stars use normalised [0,1] screen-space coordinates so they
@@ -46,7 +46,7 @@ const NEBULA_PAIRS: [string, string][] = [
 function makeNebulae(seed: number, w: number, h: number): Nebula[] {
   const rng = new SeededRandom(seed + 5555);
   const cx = w / 2, cy = h / 2;
-  const centerExclude = 380; // keep nebulae away from galactic core
+  const centerExclude = 760; // keep nebulae away from galactic core (scaled 2×)
   const result: Nebula[] = [];
   let attempts = 0;
   while (result.length < 6 && attempts < 200) {
@@ -59,8 +59,8 @@ function makeNebulae(seed: number, w: number, h: number): Nebula[] {
     const big = result.length < 2;
     result.push({
       x, y,
-      rx:  rng.range(big ? 240 : 80, big ? 440 : 210),
-      ry:  rng.range(big ? 160 : 50, big ? 300 : 150),
+      rx:  rng.range(big ? 480 : 160, big ? 880 : 420),
+      ry:  rng.range(big ? 320 : 100, big ? 600 : 300),
       rot: rng.range(0, Math.PI),
       c1, c2,
       a:   rng.range(0.25, 0.48),
@@ -293,8 +293,8 @@ export default function GalaxyCanvas() {
       const px      = Math.round(sx);
       const py      = Math.round(sy);
 
-      // Undiscovered systems render at 20% opacity — same visuals, just faded
-      const AS = (!surv && !owner) ? 0.2 : 1.0;
+      // Undiscovered systems render at 10% opacity — same visuals, just faded
+      const AS = (!surv && !owner) ? 0.1 : 1.0;
 
       /* Outer star glow (soft radial) */
       const glowR = baseR * 4.2;
@@ -608,7 +608,7 @@ export default function GalaxyCanvas() {
   const onWheel = (e: React.WheelEvent) => {
     e.preventDefault();
     const factor  = e.deltaY > 0 ? 0.85 : 1.15;
-    const newZoom = Math.max(0.2, Math.min(4, ui.cameraZoom * factor));
+    const newZoom = Math.max(0.1, Math.min(4, ui.cameraZoom * factor));
     setCamera(ui.cameraX, ui.cameraY, newZoom);
   };
 

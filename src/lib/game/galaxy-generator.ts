@@ -156,7 +156,7 @@ function poissonDisk(rng: SeededRandom, width: number, height: number, count: nu
     const dCsq = dCx * dCx + dCy * dCy;
     if (dCsq > galaxyRadiusSq) continue;
     // Skip if inside center void (reserved for black hole + core glow)
-    if (dCsq < 200 * 200) continue;
+    if (dCsq < 400 * 400) continue;
 
     const gx = Math.floor(x / cellSize);
     const gy = Math.floor(y / cellSize);

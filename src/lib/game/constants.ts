@@ -2,11 +2,11 @@ import type { PlanetType, StarType, InfraType, StationType, GroundOpType, Resour
 
 export const GAME_TICK_MS = 6000;
 export const BOT_THINK_EVERY_N_TICKS = 2;
-export const GALAXY_WIDTH = 2000;
-export const GALAXY_HEIGHT = 2000;
+export const GALAXY_WIDTH = 4000;
+export const GALAXY_HEIGHT = 4000;
 export const SYSTEM_COUNT = 100;
-export const MIN_SYSTEM_DISTANCE = 120;
-export const CONNECTION_MAX_DISTANCE = 350;
+export const MIN_SYSTEM_DISTANCE = 240;
+export const CONNECTION_MAX_DISTANCE = 700;
 
 export const STARTING_RESOURCES: Resources = {
   energy: 80,

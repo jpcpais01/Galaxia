@@ -46,7 +46,13 @@ export default function SystemPanel() {
 
   const canSurvey      = !!(myEmpire && !surveyed && !isSurveyPending && hasAdjacentSurveyed);
   const surveyBlocked  = !!(myEmpire && !surveyed && !isSurveyPending && !hasAdjacentSurveyed);
-  const canClaim       = !!(myEmpire && surveyed && !state?.ownerId);
+  // A station is being built here (possibly by someone else)
+  const stationUnderConstruction = !!(state?.stationId && !state?.ownerId);
+  // My own station that's still building
+  const myPendingStation = myEmpire?.stations.find(
+    s => s.systemId === system.id && s.buildCompletedTick > tick
+  ) ?? null;
+  const canClaim       = !!(myEmpire && surveyed && !state?.ownerId && !state?.stationId);
   const canAffordStn   = (myEmpire?.resources.minerals ?? 0) >= 300 &&
                          (myEmpire?.resources.credits  ?? 0) >= 200;
 
@@ -134,6 +140,22 @@ export default function SystemPanel() {
               BUILD STATION
               <span className="block text-[8px] text-[#3a6a8a]">300 min • 200 crd • 50 ticks</span>
             </button>
+          )}
+          {myPendingStation && (
+            <div className="font-mono text-[9px] text-[#44aaff] bg-[#050510] border border-[#1a2a3a] px-2 py-2 text-center">
+              🛰 BUILDING STATION —{' '}
+              <span className="text-[#ffaa00]">
+                {Math.max(0, myPendingStation.buildCompletedTick - tick)}t remaining
+              </span>
+              <span className="block text-[8px] text-[#2a4a5a] mt-0.5">
+                System claimed on completion
+              </span>
+            </div>
+          )}
+          {stationUnderConstruction && !myPendingStation && (
+            <div className="font-mono text-[9px] text-[#5a6a7a] bg-[#050510] border border-[#1a1a2a] px-2 py-2 text-center">
+              🔒 Station under construction
+            </div>
           )}
           {(surveyed || isMine) && ui.view !== 'system' && !system.isBlackHole && (
             <button
