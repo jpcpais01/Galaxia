@@ -293,8 +293,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
   },
 
   setView:       (view)    => set(s => ({ ui: { ...s.ui, view } })),
-  selectSystem:  (id)      => set(s => ({ ui: { ...s.ui, selectedSystemId: id, selectedPlanetId: null } })),
-  selectPlanet:  (id)      => set(s => ({ ui: { ...s.ui, selectedPlanetId: id } })),
+  selectSystem:  (id)      => set(s => ({ ui: { ...s.ui, selectedSystemId: id, selectedPlanetId: null, activePanel: 'none' } })),
+  selectPlanet:  (id)      => set(s => ({ ui: { ...s.ui, selectedPlanetId: id, activePanel: 'none' } })),
   setPanel:      (panel)   => set(s => ({ ui: { ...s.ui, activePanel: panel } })),
   setCamera:     (x,y,z)   => set(s => ({ ui: { ...s.ui, cameraX: x, cameraY: y, cameraZoom: z } })),
   setHoverSystem:(id)      => set(s => ({ ui: { ...s.ui, hoverSystemId: id } })),
