@@ -163,7 +163,14 @@ export function renderPlanetSync(ctx: CanvasRenderingContext2D | OffscreenCanvas
   }
 }
 
-// Pre-warm the cache for a set of planets
-export async function preloadPlanets(entries: { type: PlanetType; seed: number }[]): Promise<void> {
-  await Promise.all(entries.map(e => getPlanetBitmap(e.type, e.seed)));
+// Warm the cache one planet per animation frame so the main thread is never blocked
+export function preloadPlanets(entries: { type: PlanetType; seed: number }[]): void {
+  let i = 0;
+  const step = () => {
+    if (i >= entries.length) return;
+    const { type, seed } = entries[i++];
+    getPlanetBitmap(type, seed);
+    requestAnimationFrame(step);
+  };
+  requestAnimationFrame(step);
 }

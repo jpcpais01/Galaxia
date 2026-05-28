@@ -136,19 +136,34 @@ function makePlanet(rng: SeededRandom, orbit: number, totalOrbits: number, syste
 function poissonDisk(rng: SeededRandom, width: number, height: number, count: number, minDist: number): { x: number; y: number }[] {
   const points: { x: number; y: number }[] = [];
   const margin = 150;
+  const minDistSq = minDist * minDist;
+  const cellSize = minDist;
+  const cols = Math.ceil((width + cellSize) / cellSize);
+  const grid = new Map<number, { x: number; y: number }[]>();
 
   for (let attempt = 0; attempt < count * 30 && points.length < count; attempt++) {
     const x = rng.range(margin, width - margin);
     const y = rng.range(margin, height - margin);
+    const gx = Math.floor(x / cellSize);
+    const gy = Math.floor(y / cellSize);
 
-    const tooClose = points.some(p => {
-      const dx = p.x - x;
-      const dy = p.y - y;
-      return Math.sqrt(dx * dx + dy * dy) < minDist;
-    });
+    let tooClose = false;
+    outer: for (let dy = -1; dy <= 1; dy++) {
+      for (let dx = -1; dx <= 1; dx++) {
+        const cell = grid.get((gx + dx) + (gy + dy) * cols);
+        if (!cell) continue;
+        for (const p of cell) {
+          const ddx = p.x - x; const ddy = p.y - y;
+          if (ddx * ddx + ddy * ddy < minDistSq) { tooClose = true; break outer; }
+        }
+      }
+    }
 
     if (!tooClose) {
       points.push({ x, y });
+      const key = gx + gy * cols;
+      const cell = grid.get(key);
+      if (cell) cell.push({ x, y }); else grid.set(key, [{ x, y }]);
     }
   }
 
@@ -192,38 +207,37 @@ export function generateGalaxy(seed: number): GalaxyData {
   });
 
   // Build connections: connect each system to nearby systems (Delaunay-ish)
+  const maxDistSq = CONNECTION_MAX_DISTANCE * CONNECTION_MAX_DISTANCE;
   for (let i = 0; i < systems.length; i++) {
     const a = systems[i];
-    const neighbors: { dist: number; id: string }[] = [];
+    const neighbors: { distSq: number; id: string }[] = [];
 
     for (let j = 0; j < systems.length; j++) {
       if (i === j) continue;
       const b = systems[j];
       const dx = a.x - b.x;
       const dy = a.y - b.y;
-      const dist = Math.sqrt(dx * dx + dy * dy);
-      if (dist <= CONNECTION_MAX_DISTANCE) {
-        neighbors.push({ dist, id: b.id });
+      const distSq = dx * dx + dy * dy;
+      if (distSq <= maxDistSq) {
+        neighbors.push({ distSq, id: b.id });
       }
     }
 
-    // Keep up to 5 nearest connections
-    neighbors.sort((x, y) => x.dist - y.dist);
-    const keep = neighbors.slice(0, 5);
-    a.connections = keep.map(n => n.id);
+    neighbors.sort((a, b) => a.distSq - b.distSq);
+    a.connections = neighbors.slice(0, 5).map(n => n.id);
   }
 
   // Ensure graph connectivity: connect isolated nodes to their nearest neighbor
   for (const sys of systems) {
     if (sys.connections.length === 0) {
       let nearest = systems[0] === sys ? systems[1] : systems[0];
-      let nearestDist = Infinity;
+      let nearestDistSq = Infinity;
       for (const other of systems) {
         if (other === sys) continue;
         const dx = sys.x - other.x;
         const dy = sys.y - other.y;
-        const d = Math.sqrt(dx * dx + dy * dy);
-        if (d < nearestDist) { nearestDist = d; nearest = other; }
+        const dSq = dx * dx + dy * dy;
+        if (dSq < nearestDistSq) { nearestDistSq = dSq; nearest = other; }
       }
       sys.connections.push(nearest.id);
       nearest.connections.push(sys.id);
