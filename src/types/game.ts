@@ -246,6 +246,7 @@ export interface Empire {
   surveyedSystems: string[];
   pendingSurveys: PendingSurvey[];
   pendingColonizations: PendingColonization[];
+  civilization?: Civilization;
   isOnline: boolean;
   lastSeen: number;
   score: number;
@@ -317,7 +318,47 @@ export interface Player {
   gamesPlayed: number;
   wins: number;
   createdAt: number;
+  civilization?: Civilization;
 }
+
+// ─── Civilization ─────────────────────────────────────────────────────────────
+
+export type SpeciesType =
+  | 'humanoid' | 'insectoid' | 'fungal' | 'synthetic'
+  | 'aquatic'  | 'crystalline' | 'psionic' | 'gaseous';
+
+export type GovernmentType =
+  | 'democracy' | 'hive_mind' | 'theocracy'
+  | 'oligarchy' | 'military_junta' | 'federation';
+
+export type CulturalFocus =
+  | 'scientific' | 'militaristic' | 'commercial'
+  | 'expansionist' | 'diplomatic' | 'isolationist';
+
+export type CivTrait =
+  | 'resilient'  | 'industrious' | 'intelligent' | 'entrepreneurial'
+  | 'populous'   | 'swift'       | 'adaptive'    | 'psychic'
+  | 'fragile'    | 'wasteful'    | 'xenophobic'   | 'sluggish'
+  | 'primitive'  | 'hungry';
+
+export type OriginType =
+  | 'ancient_empire' | 'recent_uplift' | 'refugee_fleet'
+  | 'merchant_guild' | 'warrior_clans';
+
+export interface Civilization {
+  speciesName:   string;
+  speciesType:   SpeciesType;
+  primaryColor:  string;
+  emblem:        string;
+  homeWorldType: PlanetType;
+  government:    GovernmentType;
+  culturalFocus: CulturalFocus;
+  traits:        CivTrait[];   // typically 2 positive + 1 negative
+  origin:        OriginType;
+  motto:         string;
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
 
 export type GameView = 'galaxy' | 'system' | 'planet';
 

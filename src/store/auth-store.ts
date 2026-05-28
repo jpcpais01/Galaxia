@@ -1,7 +1,7 @@
 import { create } from 'zustand';
-import { doc, getDoc, setDoc, runTransaction } from 'firebase/firestore';
+import { doc, getDoc, setDoc, runTransaction, updateDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
-import type { Player } from '@/types/game';
+import type { Player, Civilization } from '@/types/game';
 
 const LS_KEY = 'galaxia_uid';
 
@@ -30,6 +30,7 @@ interface AuthState {
   enter: (username: string, pin: string) => Promise<void>;
   signOut: () => void;
   clearError: () => void;
+  saveCivilization: (civ: Civilization) => Promise<void>;
 }
 
 export const useAuthStore = create<AuthState>((set, get) => ({
@@ -116,4 +117,12 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 
   clearError: () => set({ error: null }),
+
+  saveCivilization: async (civ) => {
+    const { player, user } = get();
+    if (!player || !user) return;
+    const updated: Player = { ...player, civilization: civ };
+    await updateDoc(doc(db, 'users', user.uid), { civilization: civ });
+    set({ player: updated });
+  },
 }));

@@ -3,8 +3,9 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/store/auth-store';
 import { useGameStore } from '@/store/game-store';
-import type { GameMeta } from '@/types/game';
+import type { GameMeta, Civilization } from '@/types/game';
 import { EMPIRE_COLORS } from '@/lib/game/constants';
+import CivilizationCreator from './CivilizationCreator';
 
 function CreateGameModal({ onClose }: { onClose: () => void }) {
   const { player } = useAuthStore();
@@ -175,11 +176,59 @@ function GameCard({ game }: { game: GameMeta }) {
   );
 }
 
+// ── Compact civilization card for the sidebar ─────────────────────────────────
+function CivCard({ civ, onEdit }: { civ: Civilization; onEdit: () => void }) {
+  return (
+    <div
+      className="border p-3 flex flex-col gap-2"
+      style={{ borderColor: civ.primaryColor + '44', background: civ.primaryColor + '08' }}
+    >
+      <div className="flex items-center gap-2">
+        <span className="text-2xl">{civ.emblem}</span>
+        <div className="flex-1 min-w-0">
+          <div className="font-pixel text-[10px] truncate" style={{ color: civ.primaryColor }}>
+            {civ.speciesName}
+          </div>
+          <div className="font-mono text-[9px] text-[#4a6a7a]">
+            {civ.speciesType} · {civ.government.replace('_', ' ')}
+          </div>
+        </div>
+        <button
+          onClick={onEdit}
+          className="font-pixel text-[7px] px-1.5 py-1 border border-[#2a3a4a] text-[#3a5a6a] hover:text-[#6a8aa0] hover:border-[#3a5a6a] flex-shrink-0"
+        >
+          EDIT
+        </button>
+      </div>
+      <div className="flex flex-wrap gap-1">
+        {civ.traits.map(id => {
+          const pos = ['resilient','industrious','intelligent','entrepreneurial','populous','swift','adaptive','psychic'].includes(id);
+          return (
+            <span key={id} className="font-pixel text-[7px] px-1 py-0.5 border"
+              style={{
+                color: pos ? '#44cc88' : '#ff6666',
+                borderColor: pos ? '#1a3a2a' : '#3a1a1a',
+              }}>
+              {id.replace('_',' ')}
+            </span>
+          );
+        })}
+      </div>
+      {civ.motto && (
+        <p className="font-mono text-[8px] italic" style={{ color: civ.primaryColor + '88' }}>
+          "{civ.motto}"
+        </p>
+      )}
+    </div>
+  );
+}
+
 export default function LobbyScreen() {
-  const { player, signOut } = useAuthStore();
+  const { player, signOut, saveCivilization } = useAuthStore();
   const { games, loadGames } = useGameStore();
-  const [showCreate, setShowCreate] = useState(false);
-  const [loading, setLoading] = useState(false);
+  const [showCreate, setShowCreate]   = useState(false);
+  const [showCivCreator, setShowCivCreator] = useState(false);
+  const [loading, setLoading]         = useState(false);
 
   const refresh = async () => {
     setLoading(true);
@@ -189,9 +238,15 @@ export default function LobbyScreen() {
 
   useEffect(() => { refresh(); }, []);
 
-  const openGames  = games.filter(g => g.status === 'lobby');
-  const liveGames  = games.filter(g => g.status === 'playing');
-  const doneGames  = games.filter(g => g.status === 'finished');
+  const openGames = games.filter(g => g.status === 'lobby');
+  const liveGames = games.filter(g => g.status === 'playing');
+
+  const handleCivComplete = async (civ: Civilization) => {
+    await saveCivilization(civ);
+    setShowCivCreator(false);
+  };
+
+  const civ = player?.civilization;
 
   return (
     <div className="flex flex-col h-screen bg-space-900 scanlines">
@@ -206,53 +261,107 @@ export default function LobbyScreen() {
         </div>
       </div>
 
-      {/* Content */}
-      <div className="flex-1 scrollable p-6 max-w-4xl w-full mx-auto">
-        <div className="flex items-center justify-between mb-6">
-          <h2 className="font-pixel text-[11px] text-[#8899aa]">GALACTIC COMMAND</h2>
-          <div className="flex gap-3">
-            <button onClick={refresh} disabled={loading} className="btn-gray text-[9px]">
-              {loading ? '...' : '↻ REFRESH'}
-            </button>
-            <button onClick={() => setShowCreate(true)} className="btn-cyan text-[9px]">
-              + NEW GAME
-            </button>
+      {/* Two-column layout */}
+      <div className="flex flex-1 overflow-hidden">
+
+        {/* LEFT: civilization panel */}
+        <div className="w-72 flex-shrink-0 border-r border-[#1a1a2a] bg-[#030308] flex flex-col overflow-hidden">
+          <div className="px-4 py-3 border-b border-[#1a1a2a] flex-shrink-0">
+            <div className="font-pixel text-[9px] text-[#3a5a6a]">YOUR CIVILIZATION</div>
           </div>
+          <div className="flex-1 overflow-y-auto p-4 scrollable">
+            {civ ? (
+              <CivCard civ={civ} onEdit={() => setShowCivCreator(true)} />
+            ) : (
+              <div className="flex flex-col items-center gap-4 py-6 text-center">
+                <div className="text-4xl">🌌</div>
+                <div className="font-pixel text-[9px] text-[#2a3a4a] leading-relaxed">
+                  You have not yet<br />forged a civilization
+                </div>
+                <p className="font-mono text-[9px] text-[#2a3a4a] leading-relaxed">
+                  Define your species, society, and destiny before entering the stars.
+                </p>
+                <button
+                  onClick={() => setShowCivCreator(true)}
+                  className="font-pixel text-[9px] px-4 py-2 border-2 w-full"
+                  style={{
+                    borderColor: '#4488ff',
+                    color: '#4488ff',
+                    background: '#4488ff18',
+                    boxShadow: '0 0 12px #4488ff33',
+                  }}
+                >
+                  ✦ CREATE CIVILIZATION
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* If civ exists, also show a re-create button */}
+          {civ && (
+            <div className="p-4 border-t border-[#1a1a2a] flex-shrink-0">
+              <button
+                onClick={() => setShowCivCreator(true)}
+                className="btn-gray w-full text-[8px] py-2"
+              >
+                ✦ RECREATE CIVILIZATION
+              </button>
+            </div>
+          )}
         </div>
 
-        {openGames.length > 0 && (
-          <section className="mb-6">
-            <div className="font-pixel text-[9px] text-[#ffaa00] mb-3 tracking-wider">
-              ◈ OPEN LOBBIES
+        {/* RIGHT: games list */}
+        <div className="flex-1 overflow-y-auto scrollable p-6">
+          <div className="max-w-2xl mx-auto">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="font-pixel text-[11px] text-[#8899aa]">GALACTIC COMMAND</h2>
+              <div className="flex gap-3">
+                <button onClick={refresh} disabled={loading} className="btn-gray text-[9px]">
+                  {loading ? '...' : '↻ REFRESH'}
+                </button>
+                <button onClick={() => setShowCreate(true)} className="btn-cyan text-[9px]">
+                  + NEW GAME
+                </button>
+              </div>
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {openGames.map(g => <GameCard key={g.id} game={g} />)}
-            </div>
-          </section>
-        )}
 
-        {liveGames.length > 0 && (
-          <section className="mb-6">
-            <div className="font-pixel text-[9px] text-[#00ff88] mb-3 tracking-wider">
-              ◈ LIVE BATTLES
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {liveGames.map(g => <GameCard key={g.id} game={g} />)}
-            </div>
-          </section>
-        )}
+            {openGames.length > 0 && (
+              <section className="mb-6">
+                <div className="font-pixel text-[9px] text-[#ffaa00] mb-3 tracking-wider">◈ OPEN LOBBIES</div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {openGames.map(g => <GameCard key={g.id} game={g} />)}
+                </div>
+              </section>
+            )}
 
-        {games.length === 0 && !loading && (
-          <div className="text-center py-20">
-            <div className="font-pixel text-[10px] text-[#1a2a3a] mb-4">NO ACTIVE GAMES</div>
-            <button onClick={() => setShowCreate(true)} className="btn-cyan">
-              CREATE THE FIRST GAME
-            </button>
+            {liveGames.length > 0 && (
+              <section className="mb-6">
+                <div className="font-pixel text-[9px] text-[#00ff88] mb-3 tracking-wider">◈ LIVE BATTLES</div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {liveGames.map(g => <GameCard key={g.id} game={g} />)}
+                </div>
+              </section>
+            )}
+
+            {games.length === 0 && !loading && (
+              <div className="text-center py-20">
+                <div className="font-pixel text-[10px] text-[#1a2a3a] mb-4">NO ACTIVE GAMES</div>
+                <button onClick={() => setShowCreate(true)} className="btn-cyan">
+                  CREATE THE FIRST GAME
+                </button>
+              </div>
+            )}
           </div>
-        )}
+        </div>
       </div>
 
       {showCreate && <CreateGameModal onClose={() => setShowCreate(false)} />}
+      {showCivCreator && (
+        <CivilizationCreator
+          onComplete={handleCivComplete}
+          onCancel={() => setShowCivCreator(false)}
+        />
+      )}
     </div>
   );
 }
