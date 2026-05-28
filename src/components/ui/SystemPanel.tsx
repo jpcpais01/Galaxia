@@ -85,7 +85,7 @@ export default function SystemPanel() {
               <span className="block text-[8px] text-[#3a6a8a]">300 min • 200 crd</span>
             </button>
           )}
-          {(surveyed || isMine) && (
+          {(surveyed || isMine) && ui.view !== 'system' && (
             <button
               onClick={() => setView('system')}
               className="btn-green text-[9px] w-full py-2"

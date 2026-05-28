@@ -1,5 +1,5 @@
 'use client';
-import { useRef, useEffect } from 'react';
+import { useRef, useEffect, useState } from 'react';
 import { useGameStore } from '@/store/game-store';
 import { PLANET_CONFIG, INFRA_CONFIG } from '@/lib/game/constants';
 import { renderPlanetSync, getPlanetBitmap } from '@/lib/game/planet-renderer';
@@ -34,6 +34,7 @@ function PlanetDisplay({ type, seed, size }: { type: string; seed: number; size:
 
 export default function PlanetPanel() {
   const { currentGame, myEmpire, ui, colonizePlanet, setPanel } = useGameStore();
+  const [expandedMoon, setExpandedMoon] = useState<string | null>(null);
 
   const system = currentGame?.galaxy.systems.find(s => s.id === ui.selectedSystemId);
   const planet = system?.planets.find(p => p.id === ui.selectedPlanetId);
@@ -135,14 +136,38 @@ export default function PlanetPanel() {
         {/* Moons */}
         {planet.moons.length > 0 && (
           <div>
-            <div className="font-pixel text-[8px] text-[#3a5a6a] mb-1">MOONS</div>
-            {planet.moons.map(moon => (
-              <div key={moon.id} className="flex items-center gap-2 py-1 font-mono text-[10px] text-[#4a6a7a]">
-                <div className="w-2 h-2 rounded-full" style={{ background: PLANET_CONFIG[moon.type].groundColor }} />
-                {moon.name}
-                {moon.hasResources && <span className="text-[#ffaa00] text-[9px]">⛏</span>}
-              </div>
-            ))}
+            <div className="font-pixel text-[8px] text-[#3a5a6a] mb-1">MOONS ({planet.moons.length})</div>
+            {planet.moons.map(moon => {
+              const moonCfg = PLANET_CONFIG[moon.type];
+              const expanded = expandedMoon === moon.id;
+              return (
+                <div key={moon.id}>
+                  <button
+                    onClick={() => setExpandedMoon(expanded ? null : moon.id)}
+                    className="flex items-center gap-2 py-1.5 px-2 w-full font-mono text-[10px] text-[#4a6a7a] hover:bg-[#0a1020] hover:text-[#6a8a9a] transition-colors text-left"
+                  >
+                    <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: moonCfg.groundColor }} />
+                    <span className="flex-1">{moon.name}</span>
+                    {moon.hasResources && <span className="text-[#ffaa00] text-[9px]">⛏</span>}
+                    <span className="text-[#2a3a4a] text-[9px]">{expanded ? '▲' : '▼'}</span>
+                  </button>
+                  {expanded && (
+                    <div className="ml-4 mb-1 px-2 py-2 bg-[#050510] border border-[#1a1a2a] font-mono text-[10px] flex flex-col gap-1">
+                      <div className="flex justify-between">
+                        <span className="text-[#3a5a6a]">Type</span>
+                        <span style={{ color: moonCfg.colonizable ? '#44cc44' : '#6a8a9a' }}>{moonCfg.label}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-[#3a5a6a]">Resources</span>
+                        <span className={moon.hasResources ? 'text-[#ffaa00]' : 'text-[#2a3a4a]'}>
+                          {moon.hasResources ? 'PRESENT' : 'NONE'}
+                        </span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
         )}
       </div>

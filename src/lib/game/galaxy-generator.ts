@@ -135,15 +135,26 @@ function makePlanet(rng: SeededRandom, orbit: number, totalOrbits: number, syste
 
 function poissonDisk(rng: SeededRandom, width: number, height: number, count: number, minDist: number): { x: number; y: number }[] {
   const points: { x: number; y: number }[] = [];
-  const margin = 150;
+  const cx = width / 2;
+  const cy = height / 2;
+  const galaxyRadius = Math.min(width, height) / 2 - 150;
+  const galaxyRadiusSq = galaxyRadius * galaxyRadius;
   const minDistSq = minDist * minDist;
   const cellSize = minDist;
   const cols = Math.ceil((width + cellSize) / cellSize);
   const grid = new Map<number, { x: number; y: number }[]>();
 
   for (let attempt = 0; attempt < count * 30 && points.length < count; attempt++) {
-    const x = rng.range(margin, width - margin);
-    const y = rng.range(margin, height - margin);
+    // Uniform random point inside the galaxy circle
+    const angle = rng.next() * Math.PI * 2;
+    const r = Math.sqrt(rng.next()) * galaxyRadius;
+    const x = cx + Math.cos(angle) * r;
+    const y = cy + Math.sin(angle) * r;
+
+    // Skip if outside circle (safety check)
+    const dCx = x - cx; const dCy = y - cy;
+    if (dCx * dCx + dCy * dCy > galaxyRadiusSq) continue;
+
     const gx = Math.floor(x / cellSize);
     const gy = Math.floor(y / cellSize);
 
