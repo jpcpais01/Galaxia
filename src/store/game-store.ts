@@ -2,7 +2,7 @@
 import { create } from 'zustand';
 import {
   doc, collection, setDoc, updateDoc, onSnapshot, getDocs,
-  query, orderBy, limit, runTransaction, addDoc, arrayUnion, getDoc,
+  query, orderBy, limit, runTransaction, addDoc, arrayUnion, getDoc, deleteDoc,
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import type {
@@ -24,6 +24,7 @@ interface GameStore {
   createGame: (name: string, maxPlayers: number, botCount: number, hostPlayerId: string, hostUsername: string, starCount?: number) => Promise<string>;
   joinGame: (gameId: string, playerId: string, username: string, color: string) => Promise<void>;
   startGame: (gameId: string) => Promise<void>;
+  deleteGame: (gameId: string) => Promise<void>;
 
   // Active game
   currentGame: GameMeta | null;
@@ -243,6 +244,21 @@ export const useGameStore = create<GameStore>((set, get) => ({
       lastTickTime: Date.now(),
       hostEmpireId: empireSnap.docs[0]?.id,
     });
+  },
+
+  deleteGame: async (gameId) => {
+    // Delete subcollections first (empires, events), then the game doc
+    const [empireSnap, eventSnap] = await Promise.all([
+      getDocs(collection(db, 'games', gameId, 'empires')),
+      getDocs(collection(db, 'games', gameId, 'events')),
+    ]);
+    await Promise.all([
+      ...empireSnap.docs.map(d => deleteDoc(d.ref)),
+      ...eventSnap.docs.map(d => deleteDoc(d.ref)),
+    ]);
+    await deleteDoc(doc(db, 'games', gameId));
+    // Refresh local list
+    set(s => ({ games: s.games.filter(g => g.id !== gameId) }));
   },
 
   subscribeToGame: (gameId, playerId) => {

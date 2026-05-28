@@ -90,9 +90,13 @@ function CreateGameModal({ onClose }: { onClose: () => void }) {
 
 function GameCard({ game }: { game: GameMeta }) {
   const { player } = useAuthStore();
-  const { joinGame } = useGameStore();
+  const { joinGame, deleteGame } = useGameStore();
   const router = useRouter();
   const [joining, setJoining] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+
+  const isOwner = player?.id === game.createdBy;
 
   const join = async () => {
     if (!player) return;
@@ -111,6 +115,12 @@ function GameCard({ game }: { game: GameMeta }) {
     router.push(`/game/${game.id}`);
   };
 
+  const handleDelete = async () => {
+    if (!confirmDelete) { setConfirmDelete(true); return; }
+    setDeleting(true);
+    await deleteGame(game.id);
+  };
+
   const statusColor = game.status === 'lobby' ? '#ffaa00' : game.status === 'playing' ? '#00ff88' : '#5a6a7a';
   const statusLabel = game.status.toUpperCase();
 
@@ -123,8 +133,25 @@ function GameCard({ game }: { game: GameMeta }) {
             by {game.createdByUsername}
           </div>
         </div>
-        <div className="font-pixel text-[9px]" style={{ color: statusColor }}>
-          {statusLabel}
+        <div className="flex items-center gap-2">
+          <div className="font-pixel text-[9px]" style={{ color: statusColor }}>
+            {statusLabel}
+          </div>
+          {isOwner && (
+            <button
+              onClick={handleDelete}
+              disabled={deleting}
+              onBlur={() => setConfirmDelete(false)}
+              className="font-pixel text-[8px] px-1.5 py-0.5 border transition-colors disabled:opacity-40"
+              style={{
+                color: confirmDelete ? '#ff4455' : '#3a4a5a',
+                borderColor: confirmDelete ? '#ff4455' : '#1a2a3a',
+                background: confirmDelete ? '#1a0005' : 'transparent',
+              }}
+            >
+              {deleting ? '...' : confirmDelete ? 'CONFIRM' : '✕'}
+            </button>
+          )}
         </div>
       </div>
 
