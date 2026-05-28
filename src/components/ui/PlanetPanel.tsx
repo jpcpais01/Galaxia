@@ -244,10 +244,10 @@ export default function PlanetPanel() {
           </div>
         )}
 
-        {/* Ground Operations — only on planets with natural resources */}
+        {/* Resource Operations — only on planets with natural resources */}
         {controlled && planet.hasResources && (
           <div>
-            <div className="font-pixel text-[8px] text-[#3a5a6a] mb-2">GROUND OPERATIONS</div>
+            <div className="font-pixel text-[8px] text-[#3a5a6a] mb-2">RESOURCE OPERATIONS</div>
 
             {/* Active / building ops */}
             {myGroundOps.map(op => {

@@ -201,7 +201,7 @@ export default function SystemPanel() {
           </div>
         )}
 
-        {/* Ground Operations — separated into Stars / Planets / Moons */}
+        {/* Resource Operations — separated into Stars / Planets / Moons */}
         {isMine && surveyed && !system.isBlackHole && (() => {
           const resourcePlanets = system.planets.filter(p => p.hasResources);
           const resourceMoons   = system.planets.flatMap(p => p.moons.filter(m => m.hasResources));
@@ -234,7 +234,7 @@ export default function SystemPanel() {
 
           return (
             <div>
-              <div className="font-pixel text-[8px] text-[#3a5a6a] mb-2">GROUND OPERATIONS</div>
+              <div className="font-pixel text-[8px] text-[#3a5a6a] mb-2">RESOURCE OPERATIONS</div>
 
               {/* Active/building ops with destroy button */}
               {myGroundOps.length > 0 && (

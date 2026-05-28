@@ -25,7 +25,7 @@ export function computeResourceRates(empire: Empire, currentTick = 0): Resources
     }
   }
 
-  // Active ground operations
+  // Active resource operations
   for (const op of (empire.groundOps ?? [])) {
     if (!op.active) continue;
     const cfg = GROUND_OP_CONFIG[op.type];
