@@ -45,19 +45,28 @@ const NEBULA_PAIRS: [string, string][] = [
 
 function makeNebulae(seed: number, w: number, h: number): Nebula[] {
   const rng = new SeededRandom(seed + 5555);
-  return Array.from({ length: 11 }, (_, i) => {
+  const cx = w / 2, cy = h / 2;
+  const centerExclude = 380; // keep nebulae away from galactic core
+  const result: Nebula[] = [];
+  let attempts = 0;
+  while (result.length < 6 && attempts < 200) {
+    attempts++;
+    const x = rng.range(w * 0.05, w * 0.95);
+    const y = rng.range(h * 0.05, h * 0.95);
+    const dx = x - cx, dy = y - cy;
+    if (Math.sqrt(dx * dx + dy * dy) < centerExclude) continue;
     const [c1, c2] = rng.pick(NEBULA_PAIRS);
-    const big = i < 4;
-    return {
-      x:   rng.range(w * 0.06, w * 0.94),
-      y:   rng.range(h * 0.06, h * 0.94),
-      rx:  rng.range(big ? 280 : 90,  big ? 580 : 260),
-      ry:  rng.range(big ? 190 : 60,  big ? 400 : 180),
+    const big = result.length < 2;
+    result.push({
+      x, y,
+      rx:  rng.range(big ? 240 : 80, big ? 440 : 210),
+      ry:  rng.range(big ? 160 : 50, big ? 300 : 150),
       rot: rng.range(0, Math.PI),
       c1, c2,
-      a:   rng.range(0.42, 0.78),
-    };
-  });
+      a:   rng.range(0.25, 0.48),
+    });
+  }
+  return result;
 }
 
 /* ─── Component ──────────────────────────────────────────────────── */
@@ -113,21 +122,34 @@ export default function GalaxyCanvas() {
     ctx.fillStyle = bg;
     ctx.fillRect(0, 0, CW, CH);
 
-    /* ── 2. Galaxy core glow — circular blob, fades to 1.5× radius ── */
+    /* ── 2. Galaxy core glow — bright orange-white blob at center ── */
     {
       const { sx: gcx, sy: gcy } = w2s(GCX, GCY, CW, CH);
-      const coreR  = GR * 1.5 * Z;           // outer edge = 1.5× galaxy radius
-      const core   = ctx.createRadialGradient(gcx, gcy, 0, gcx, gcy, coreR);
-      // Bright blue-white nucleus → deep blue-purple → fully transparent
-      core.addColorStop(0,    'rgba(200, 215, 255, 0.13)');
-      core.addColorStop(0.12, 'rgba(160, 185, 255, 0.10)');
-      core.addColorStop(0.30, 'rgba(100, 130, 220, 0.07)');
-      core.addColorStop(0.55, 'rgba( 60,  90, 170, 0.04)');
-      core.addColorStop(0.78, 'rgba( 30,  50, 120, 0.02)');
-      core.addColorStop(1,    'transparent');
-      ctx.fillStyle = core;
+
+      // Inner intense hot core (tight orange-white nucleus)
+      const innerR = GR * 0.28 * Z;
+      const inner  = ctx.createRadialGradient(gcx, gcy, 0, gcx, gcy, innerR);
+      inner.addColorStop(0,    'rgba(255, 252, 230, 0.72)');  // near-white hot centre
+      inner.addColorStop(0.08, 'rgba(255, 240, 180, 0.55)');
+      inner.addColorStop(0.22, 'rgba(255, 200, 80,  0.38)');
+      inner.addColorStop(0.50, 'rgba(255, 140, 30,  0.18)');
+      inner.addColorStop(0.80, 'rgba(200, 80,  10,  0.07)');
+      inner.addColorStop(1,    'transparent');
+      ctx.fillStyle = inner;
       ctx.beginPath();
-      ctx.arc(gcx, gcy, coreR, 0, Math.PI * 2);
+      ctx.arc(gcx, gcy, innerR, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Outer diffuse halo that fades to galaxy radius
+      const outerR = GR * 1.1 * Z;
+      const outer  = ctx.createRadialGradient(gcx, gcy, innerR * 0.4, gcx, gcy, outerR);
+      outer.addColorStop(0,    'rgba(255, 160, 40,  0.12)');
+      outer.addColorStop(0.30, 'rgba(200, 100, 20,  0.06)');
+      outer.addColorStop(0.65, 'rgba(120,  50, 10,  0.03)');
+      outer.addColorStop(1,    'transparent');
+      ctx.fillStyle = outer;
+      ctx.beginPath();
+      ctx.arc(gcx, gcy, outerR, 0, Math.PI * 2);
       ctx.fill();
     }
 

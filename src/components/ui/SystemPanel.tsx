@@ -3,9 +3,16 @@ import { useGameStore } from '@/store/game-store';
 import { PLANET_CONFIG, STAR_CONFIG, GROUND_OP_CONFIG } from '@/lib/game/constants';
 import type { GroundOpType } from '@/types/game';
 
-const GROUND_OPS: { type: GroundOpType; label: string; icon: string }[] = [
+const STAR_OPS:   { type: GroundOpType; label: string; icon: string }[] = [
+  { type: 'solar_collector',       label: 'Solar Collector',    icon: '☀' },
+];
+const PLANET_OPS: { type: GroundOpType; label: string; icon: string }[] = [
   { type: 'mineral_extractor',     label: 'Mineral Extractor',  icon: '⛏' },
   { type: 'atmospheric_processor', label: 'Atmo Processor',     icon: '🌫' },
+  { type: 'deep_scanner',          label: 'Deep Scanner',       icon: '📡' },
+];
+const MOON_OPS: { type: GroundOpType; label: string; icon: string }[] = [
+  { type: 'mineral_extractor',     label: 'Mineral Extractor',  icon: '⛏' },
   { type: 'deep_scanner',          label: 'Deep Scanner',       icon: '📡' },
 ];
 
@@ -171,12 +178,33 @@ export default function SystemPanel() {
           </div>
         )}
 
-        {/* Ground Operations (controlled systems only, on resource planets) */}
+        {/* Ground Operations — separated into Stars / Planets / Moons */}
         {isMine && surveyed && !system.isBlackHole && (() => {
           const resourcePlanets = system.planets.filter(p => p.hasResources);
           const resourceMoons   = system.planets.flatMap(p => p.moons.filter(m => m.hasResources));
-          const hasAnyResource  = resourcePlanets.length > 0 || resourceMoons.length > 0;
-          if (!hasAnyResource) return null;
+          const stars           = system.stars;
+
+          const hasAnything = stars.length > 0 || resourcePlanets.length > 0 || resourceMoons.length > 0;
+          if (!hasAnything) return null;
+
+          const buildBtn = (targetId: string, ops: typeof PLANET_OPS) => ops.map(({ type, icon }) => {
+            const cfg = GROUND_OP_CONFIG[type];
+            const already = myGroundOps.some(g => g.targetId === targetId && g.type === type);
+            const affordable = (myEmpire?.resources.minerals ?? 0) >= cfg.mineralCost &&
+                               (myEmpire?.resources.credits  ?? 0) >= cfg.creditCost;
+            return (
+              <button
+                key={type}
+                onClick={() => buildGroundOp(system.id, targetId, type)}
+                disabled={already || !affordable}
+                className="w-full flex items-center justify-between px-2 py-1 border border-[#1a1a2a] bg-[#05050f] hover:border-[#2a3a3a] disabled:opacity-40 disabled:cursor-not-allowed mb-0.5 font-mono text-[9px]"
+              >
+                <span className="text-[#6a8a8a]">{icon} {cfg.label}</span>
+                <span className="text-[#3a5a4a]">{cfg.mineralCost}m {cfg.creditCost}c</span>
+              </button>
+            );
+          });
+
           return (
             <div>
               <div className="font-pixel text-[8px] text-[#3a5a6a] mb-2">GROUND OPERATIONS</div>
@@ -205,53 +233,50 @@ export default function SystemPanel() {
                 </div>
               )}
 
-              {/* Build ops on each resource planet */}
-              {resourcePlanets.map(planet => (
-                <div key={planet.id} className="mb-2">
-                  <div className="font-pixel text-[7px] text-[#2a4a5a] mb-1">{planet.name}</div>
-                  {GROUND_OPS.map(({ type, icon }) => {
-                    const cfg = GROUND_OP_CONFIG[type];
-                    const already = myGroundOps.some(g => g.targetId === planet.id && g.type === type);
-                    const affordable = (myEmpire?.resources.minerals ?? 0) >= cfg.mineralCost &&
-                                       (myEmpire?.resources.credits  ?? 0) >= cfg.creditCost;
-                    return (
-                      <button
-                        key={type}
-                        onClick={() => buildGroundOp(system.id, planet.id, type)}
-                        disabled={already || !affordable}
-                        className="w-full flex items-center justify-between px-2 py-1 border border-[#1a1a2a] bg-[#05050f] hover:border-[#2a3a3a] disabled:opacity-40 disabled:cursor-not-allowed mb-0.5 font-mono text-[9px]"
-                      >
-                        <span className="text-[#6a8a8a]">{icon} {cfg.label}</span>
-                        <span className="text-[#3a5a4a]">{cfg.mineralCost}m {cfg.creditCost}c</span>
-                      </button>
-                    );
-                  })}
+              {/* ── STARS ─────────────────────────────────── */}
+              {stars.length > 0 && (
+                <div className="mb-3">
+                  <div className="font-pixel text-[7px] text-[#7a5a30] mb-1.5 flex items-center gap-1">
+                    <span className="text-[#ff8844]">★</span> STARS
+                  </div>
+                  {stars.map(star => (
+                    <div key={star.id} className="mb-2">
+                      <div className="font-pixel text-[7px] text-[#2a4a5a] mb-1">{STAR_CONFIG[star.type]?.label ?? star.type}</div>
+                      {buildBtn(star.id, STAR_OPS)}
+                    </div>
+                  ))}
                 </div>
-              ))}
+              )}
 
-              {/* Build ops on resource moons */}
-              {resourceMoons.map(moon => (
-                <div key={moon.id} className="mb-2">
-                  <div className="font-pixel text-[7px] text-[#2a4a5a] mb-1">{moon.name} ◉</div>
-                  {GROUND_OPS.map(({ type, icon }) => {
-                    const cfg = GROUND_OP_CONFIG[type];
-                    const already = myGroundOps.some(g => g.targetId === moon.id && g.type === type);
-                    const affordable = (myEmpire?.resources.minerals ?? 0) >= cfg.mineralCost &&
-                                       (myEmpire?.resources.credits  ?? 0) >= cfg.creditCost;
-                    return (
-                      <button
-                        key={type}
-                        onClick={() => buildGroundOp(system.id, moon.id, type)}
-                        disabled={already || !affordable}
-                        className="w-full flex items-center justify-between px-2 py-1 border border-[#1a1a2a] bg-[#05050f] hover:border-[#2a3a3a] disabled:opacity-40 disabled:cursor-not-allowed mb-0.5 font-mono text-[9px]"
-                      >
-                        <span className="text-[#6a8a8a]">{icon} {cfg.label}</span>
-                        <span className="text-[#3a5a4a]">{cfg.mineralCost}m {cfg.creditCost}c</span>
-                      </button>
-                    );
-                  })}
+              {/* ── PLANETS ───────────────────────────────── */}
+              {resourcePlanets.length > 0 && (
+                <div className="mb-3">
+                  <div className="font-pixel text-[7px] text-[#3a6a5a] mb-1.5 flex items-center gap-1">
+                    <span className="text-[#44ffaa]">◉</span> PLANETS
+                  </div>
+                  {resourcePlanets.map(planet => (
+                    <div key={planet.id} className="mb-2">
+                      <div className="font-pixel text-[7px] text-[#2a4a5a] mb-1">{planet.name}</div>
+                      {buildBtn(planet.id, PLANET_OPS)}
+                    </div>
+                  ))}
                 </div>
-              ))}
+              )}
+
+              {/* ── MOONS ─────────────────────────────────── */}
+              {resourceMoons.length > 0 && (
+                <div className="mb-3">
+                  <div className="font-pixel text-[7px] text-[#3a4a6a] mb-1.5 flex items-center gap-1">
+                    <span className="text-[#8888ff]">○</span> MOONS
+                  </div>
+                  {resourceMoons.map(moon => (
+                    <div key={moon.id} className="mb-2">
+                      <div className="font-pixel text-[7px] text-[#2a4a5a] mb-1">{moon.name}</div>
+                      {buildBtn(moon.id, MOON_OPS)}
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           );
         })()}

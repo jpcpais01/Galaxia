@@ -5,9 +5,11 @@ import { useAuthStore } from '@/store/auth-store';
 import { useGameStore } from '@/store/game-store';
 import type { GameMeta, Civilization } from '@/types/game';
 import { EMPIRE_COLORS } from '@/lib/game/constants';
-import CivilizationCreator from './CivilizationCreator';
+import CivilizationCreator, { EmblemCanvas } from './CivilizationCreator';
 
-function CreateGameModal({ onClose }: { onClose: () => void }) {
+// ── Create game modal ─────────────────────────────────────────────────────────
+
+function CreateGameModal({ onClose, civilization }: { onClose: () => void; civilization?: Civilization }) {
   const { player } = useAuthStore();
   const { createGame } = useGameStore();
   const router = useRouter();
@@ -20,7 +22,7 @@ function CreateGameModal({ onClose }: { onClose: () => void }) {
   const create = async () => {
     if (!player) return;
     setLoading(true);
-    const id = await createGame(name, maxP, bots, player.id, player.username, stars);
+    const id = await createGame(name, maxP, bots, player.id, player.username, stars, civilization);
     router.push(`/game/${id}`);
   };
 
@@ -28,6 +30,19 @@ function CreateGameModal({ onClose }: { onClose: () => void }) {
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
       <div className="pixel-panel w-full max-w-sm p-6 flex flex-col gap-4 fade-in">
         <div className="panel-header">Create New Galaxy</div>
+
+        {/* Selected civ banner */}
+        {civilization && (
+          <div className="flex items-center gap-2 px-3 py-2 border border-[#1a2a3a] bg-[#050510]">
+            <EmblemCanvas emblemId={civilization.emblem} color={civilization.primaryColor} size={24} />
+            <div>
+              <div className="font-pixel text-[8px]" style={{ color: civilization.primaryColor }}>
+                {civilization.speciesName}
+              </div>
+              <div className="font-mono text-[8px] text-[#3a5a6a]">{civilization.speciesType}</div>
+            </div>
+          </div>
+        )}
 
         <div className="flex flex-col gap-1">
           <label className="font-pixel text-[9px] text-[#5a7a8a]">GALAXY NAME</label>
@@ -89,7 +104,9 @@ function CreateGameModal({ onClose }: { onClose: () => void }) {
   );
 }
 
-function GameCard({ game }: { game: GameMeta }) {
+// ── Game card ─────────────────────────────────────────────────────────────────
+
+function GameCard({ game, civilization }: { game: GameMeta; civilization?: Civilization }) {
   const { player } = useAuthStore();
   const { joinGame, deleteGame } = useGameStore();
   const router = useRouter();
@@ -102,17 +119,16 @@ function GameCard({ game }: { game: GameMeta }) {
   const join = async () => {
     if (!player) return;
     setJoining(true);
-    const color = EMPIRE_COLORS[game.currentPlayers % EMPIRE_COLORS.length];
-    await joinGame(game.id, player.id, player.username, color);
+    const color = civilization?.primaryColor ?? EMPIRE_COLORS[game.currentPlayers % EMPIRE_COLORS.length];
+    await joinGame(game.id, player.id, player.username, color, civilization);
     router.push(`/game/${game.id}`);
   };
 
-  // Also ensures the player has an empire before entering a live game
   const enter = async () => {
     if (!player) return;
     setJoining(true);
-    const color = EMPIRE_COLORS[game.currentPlayers % EMPIRE_COLORS.length];
-    await joinGame(game.id, player.id, player.username, color);
+    const color = civilization?.primaryColor ?? EMPIRE_COLORS[game.currentPlayers % EMPIRE_COLORS.length];
+    await joinGame(game.id, player.id, player.username, color, civilization);
     router.push(`/game/${game.id}`);
   };
 
@@ -123,20 +139,17 @@ function GameCard({ game }: { game: GameMeta }) {
   };
 
   const statusColor = game.status === 'lobby' ? '#ffaa00' : game.status === 'playing' ? '#00ff88' : '#5a6a7a';
-  const statusLabel = game.status.toUpperCase();
 
   return (
     <div className="pixel-panel p-4 flex flex-col gap-3 hover:border-[#2a2a5a] transition-colors">
       <div className="flex items-start justify-between">
         <div>
           <div className="font-pixel text-[10px] text-[#c0d0e0]">{game.name}</div>
-          <div className="font-mono text-[11px] text-[#3a5a6a] mt-1">
-            by {game.createdByUsername}
-          </div>
+          <div className="font-mono text-[11px] text-[#3a5a6a] mt-1">by {game.createdByUsername}</div>
         </div>
         <div className="flex items-center gap-2">
           <div className="font-pixel text-[9px]" style={{ color: statusColor }}>
-            {statusLabel}
+            {game.status.toUpperCase()}
           </div>
           {isOwner && (
             <button
@@ -176,59 +189,112 @@ function GameCard({ game }: { game: GameMeta }) {
   );
 }
 
-// ── Compact civilization card for the sidebar ─────────────────────────────────
-function CivCard({ civ, onEdit }: { civ: Civilization; onEdit: () => void }) {
+// ── Civ card (sidebar) ────────────────────────────────────────────────────────
+
+const POS_TRAITS = new Set([
+  'resilient','industrious','intelligent','entrepreneurial',
+  'populous','swift','adaptive','psychic',
+]);
+
+function CivCard({
+  civ, isSelected, onSelect, onEdit, onDelete,
+}: {
+  civ: Civilization;
+  isSelected: boolean;
+  onSelect: () => void;
+  onEdit: () => void;
+  onDelete: () => void;
+}) {
   return (
-    <div
-      className="border p-3 flex flex-col gap-2"
-      style={{ borderColor: civ.primaryColor + '44', background: civ.primaryColor + '08' }}
+    <button
+      onClick={onSelect}
+      className="w-full text-left border p-3 flex flex-col gap-2 transition-all"
+      style={{
+        borderColor: isSelected ? civ.primaryColor : civ.primaryColor + '44',
+        background:  isSelected ? civ.primaryColor + '14' : civ.primaryColor + '07',
+        boxShadow:   isSelected ? `0 0 10px ${civ.primaryColor}33` : 'none',
+      }}
     >
       <div className="flex items-center gap-2">
-        <span className="text-2xl">{civ.emblem}</span>
+        <EmblemCanvas emblemId={civ.emblem} color={civ.primaryColor} size={32} />
         <div className="flex-1 min-w-0">
           <div className="font-pixel text-[10px] truncate" style={{ color: civ.primaryColor }}>
             {civ.speciesName}
           </div>
           <div className="font-mono text-[9px] text-[#4a6a7a]">
-            {civ.speciesType} · {civ.government.replace('_', ' ')}
+            {civ.speciesType} · {civ.government.replace(/_/g,' ')}
           </div>
         </div>
-        <button
-          onClick={onEdit}
-          className="font-pixel text-[7px] px-1.5 py-1 border border-[#2a3a4a] text-[#3a5a6a] hover:text-[#6a8aa0] hover:border-[#3a5a6a] flex-shrink-0"
-        >
-          EDIT
-        </button>
+        <div className="flex gap-1 flex-shrink-0">
+          <button
+            onClick={e => { e.stopPropagation(); onEdit(); }}
+            className="font-pixel text-[7px] px-1.5 py-1 border border-[#2a3a4a] text-[#3a5a6a] hover:text-[#6a8aa0] hover:border-[#3a5a6a]"
+          >
+            EDIT
+          </button>
+          <button
+            onClick={e => { e.stopPropagation(); onDelete(); }}
+            className="font-pixel text-[7px] px-1.5 py-1 border border-[#2a1a1a] text-[#5a3a3a] hover:text-[#ff4455] hover:border-[#ff4455]"
+          >
+            ✕
+          </button>
+        </div>
       </div>
+
       <div className="flex flex-wrap gap-1">
         {civ.traits.map(id => {
-          const pos = ['resilient','industrious','intelligent','entrepreneurial','populous','swift','adaptive','psychic'].includes(id);
+          const pos = POS_TRAITS.has(id);
           return (
             <span key={id} className="font-pixel text-[7px] px-1 py-0.5 border"
-              style={{
-                color: pos ? '#44cc88' : '#ff6666',
-                borderColor: pos ? '#1a3a2a' : '#3a1a1a',
-              }}>
-              {id.replace('_',' ')}
+              style={{ color: pos ? '#44cc88' : '#ff6666', borderColor: pos ? '#1a3a2a' : '#3a1a1a' }}>
+              {id.replace(/_/g,' ')}
             </span>
           );
         })}
       </div>
+
+      {isSelected && (
+        <div className="font-pixel text-[7px] text-center mt-0.5" style={{ color: civ.primaryColor + 'aa' }}>
+          ✓ SELECTED
+        </div>
+      )}
+
       {civ.motto && (
         <p className="font-mono text-[8px] italic" style={{ color: civ.primaryColor + '88' }}>
           "{civ.motto}"
         </p>
       )}
-    </div>
+    </button>
   );
 }
 
+// ── Main lobby ────────────────────────────────────────────────────────────────
+
 export default function LobbyScreen() {
-  const { player, signOut, saveCivilization } = useAuthStore();
+  const { player, saveCivilization, deleteCivilization } = useAuthStore();
   const { games, loadGames } = useGameStore();
-  const [showCreate, setShowCreate]   = useState(false);
+
+  const [showCreate, setShowCreate]     = useState(false);
   const [showCivCreator, setShowCivCreator] = useState(false);
-  const [loading, setLoading]         = useState(false);
+  const [editCivIdx, setEditCivIdx]     = useState<number | undefined>(undefined);
+  const [selectedCivIdx, setSelectedCivIdx] = useState(0);
+  const [loading, setLoading]           = useState(false);
+  const [confirmDeleteIdx, setConfirmDeleteIdx] = useState<number | null>(null);
+
+  const civs: Civilization[] = player?.civilizations
+    ?? (player?.civilization ? [player.civilization] : []);
+
+  const selectedCiv: Civilization | undefined = civs[selectedCivIdx];
+
+  // Keep selection in bounds when list shrinks
+  useEffect(() => {
+    if (selectedCivIdx >= civs.length && civs.length > 0) {
+      setSelectedCivIdx(civs.length - 1);
+    }
+  }, [civs.length]);
+
+  // Auto-select newest after creation
+  const prevCivsLen = civs.length;
 
   const refresh = async () => {
     setLoading(true);
@@ -242,11 +308,40 @@ export default function LobbyScreen() {
   const liveGames = games.filter(g => g.status === 'playing');
 
   const handleCivComplete = async (civ: Civilization) => {
-    await saveCivilization(civ);
+    await saveCivilization(civ, editCivIdx);
+    // Select the newly created/edited civ
+    const isNew = editCivIdx === undefined;
+    if (isNew) {
+      // new civ will be appended → select last
+      setSelectedCivIdx(Math.max(0, civs.length)); // civs hasn't refreshed yet, will be civs.length after update
+    } else {
+      setSelectedCivIdx(editCivIdx);
+    }
     setShowCivCreator(false);
+    setEditCivIdx(undefined);
   };
 
-  const civ = player?.civilization;
+  const handleEditCiv = (idx: number) => {
+    setEditCivIdx(idx);
+    setShowCivCreator(true);
+  };
+
+  const handleDeleteCiv = async (idx: number) => {
+    if (confirmDeleteIdx !== idx) {
+      setConfirmDeleteIdx(idx);
+      return;
+    }
+    await deleteCivilization(idx);
+    setConfirmDeleteIdx(null);
+    if (selectedCivIdx >= idx && selectedCivIdx > 0) {
+      setSelectedCivIdx(selectedCivIdx - 1);
+    }
+  };
+
+  const handleNewCiv = () => {
+    setEditCivIdx(undefined);
+    setShowCivCreator(true);
+  };
 
   return (
     <div className="flex flex-col h-screen bg-space-900 scanlines">
@@ -257,69 +352,104 @@ export default function LobbyScreen() {
           <span className="font-mono text-[11px] text-[#5a8aa0]">
             CDR. <span className="text-[#c0d0e0]">{player?.username}</span>
           </span>
-          <button onClick={signOut} className="btn-gray text-[9px] py-1">LOGOUT</button>
+          {/* No logout — exit button just goes to home */}
         </div>
       </div>
 
       {/* Two-column layout */}
       <div className="flex flex-1 overflow-hidden">
 
-        {/* LEFT: civilization panel */}
+        {/* LEFT: civilizations */}
         <div className="w-72 flex-shrink-0 border-r border-[#1a1a2a] bg-[#030308] flex flex-col overflow-hidden">
-          <div className="px-4 py-3 border-b border-[#1a1a2a] flex-shrink-0">
-            <div className="font-pixel text-[9px] text-[#3a5a6a]">YOUR CIVILIZATION</div>
-          </div>
-          <div className="flex-1 overflow-y-auto p-4 scrollable">
-            {civ ? (
-              <CivCard civ={civ} onEdit={() => setShowCivCreator(true)} />
-            ) : (
-              <div className="flex flex-col items-center gap-4 py-6 text-center">
-                <div className="text-4xl">🌌</div>
-                <div className="font-pixel text-[9px] text-[#2a3a4a] leading-relaxed">
-                  You have not yet<br />forged a civilization
-                </div>
-                <p className="font-mono text-[9px] text-[#2a3a4a] leading-relaxed">
-                  Define your species, society, and destiny before entering the stars.
-                </p>
-                <button
-                  onClick={() => setShowCivCreator(true)}
-                  className="font-pixel text-[9px] px-4 py-2 border-2 w-full"
-                  style={{
-                    borderColor: '#4488ff',
-                    color: '#4488ff',
-                    background: '#4488ff18',
-                    boxShadow: '0 0 12px #4488ff33',
-                  }}
-                >
-                  ✦ CREATE CIVILIZATION
-                </button>
-              </div>
-            )}
+          <div className="px-4 py-2.5 border-b border-[#1a1a2a] flex items-center justify-between flex-shrink-0">
+            <div className="font-pixel text-[9px] text-[#3a5a6a]">YOUR CIVILIZATIONS</div>
+            <div className="font-mono text-[8px] text-[#2a3a4a]">{civs.length} saved</div>
           </div>
 
-          {/* If civ exists, also show a re-create button */}
-          {civ && (
-            <div className="p-4 border-t border-[#1a1a2a] flex-shrink-0">
-              <button
-                onClick={() => setShowCivCreator(true)}
-                className="btn-gray w-full text-[8px] py-2"
-              >
-                ✦ RECREATE CIVILIZATION
-              </button>
-            </div>
-          )}
+          <div className="flex-1 overflow-y-auto p-3 scrollable flex flex-col gap-2">
+            {civs.length === 0 && (
+              <div className="flex flex-col items-center gap-4 py-8 text-center">
+                <div className="font-pixel text-[9px] text-[#2a3a4a] leading-relaxed">
+                  No civilizations yet.<br />
+                  <span className="text-[#1a2a3a]">Forge one before entering the stars.</span>
+                </div>
+              </div>
+            )}
+
+            {civs.map((civ, i) => (
+              <div key={i} className="relative">
+                <CivCard
+                  civ={civ}
+                  isSelected={i === selectedCivIdx}
+                  onSelect={() => { setSelectedCivIdx(i); setConfirmDeleteIdx(null); }}
+                  onEdit={() => handleEditCiv(i)}
+                  onDelete={() => handleDeleteCiv(i)}
+                />
+                {confirmDeleteIdx === i && (
+                  <div className="mt-1 flex gap-1">
+                    <button
+                      onClick={() => handleDeleteCiv(i)}
+                      className="flex-1 font-pixel text-[8px] py-1 border border-[#ff4455] text-[#ff4455] bg-[#1a0005]"
+                    >
+                      CONFIRM DELETE
+                    </button>
+                    <button
+                      onClick={() => setConfirmDeleteIdx(null)}
+                      className="flex-1 font-pixel text-[8px] py-1 border border-[#2a3a4a] text-[#4a6a7a]"
+                    >
+                      CANCEL
+                    </button>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+
+          <div className="p-3 border-t border-[#1a1a2a] flex-shrink-0">
+            <button
+              onClick={handleNewCiv}
+              className="font-pixel text-[9px] px-4 py-2 border-2 w-full transition-all"
+              style={{
+                borderColor: '#4488ff',
+                color: '#4488ff',
+                background: '#4488ff18',
+                boxShadow: '0 0 12px #4488ff22',
+              }}
+            >
+              ✦ NEW CIVILIZATION
+            </button>
+          </div>
         </div>
 
         {/* RIGHT: games list */}
         <div className="flex-1 overflow-y-auto scrollable p-6">
           <div className="max-w-2xl mx-auto">
             <div className="flex items-center justify-between mb-6">
-              <h2 className="font-pixel text-[11px] text-[#8899aa]">GALACTIC COMMAND</h2>
+              <div>
+                <h2 className="font-pixel text-[11px] text-[#8899aa]">GALACTIC COMMAND</h2>
+                {selectedCiv ? (
+                  <div className="flex items-center gap-2 mt-1">
+                    <EmblemCanvas emblemId={selectedCiv.emblem} color={selectedCiv.primaryColor} size={16} />
+                    <span className="font-mono text-[9px]" style={{ color: selectedCiv.primaryColor + 'aa' }}>
+                      Playing as {selectedCiv.speciesName}
+                    </span>
+                  </div>
+                ) : (
+                  <div className="font-mono text-[9px] text-[#3a4a5a] mt-1">
+                    ⚠ Create a civilization to enter the stars
+                  </div>
+                )}
+              </div>
               <div className="flex gap-3">
                 <button onClick={refresh} disabled={loading} className="btn-gray text-[9px]">
                   {loading ? '...' : '↻ REFRESH'}
                 </button>
-                <button onClick={() => setShowCreate(true)} className="btn-cyan text-[9px]">
+                <button
+                  onClick={() => setShowCreate(true)}
+                  disabled={!selectedCiv}
+                  className="btn-cyan text-[9px] disabled:opacity-40 disabled:cursor-not-allowed"
+                  title={!selectedCiv ? 'Create a civilization first' : undefined}
+                >
                   + NEW GAME
                 </button>
               </div>
@@ -329,7 +459,7 @@ export default function LobbyScreen() {
               <section className="mb-6">
                 <div className="font-pixel text-[9px] text-[#ffaa00] mb-3 tracking-wider">◈ OPEN LOBBIES</div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  {openGames.map(g => <GameCard key={g.id} game={g} />)}
+                  {openGames.map(g => <GameCard key={g.id} game={g} civilization={selectedCiv} />)}
                 </div>
               </section>
             )}
@@ -338,7 +468,7 @@ export default function LobbyScreen() {
               <section className="mb-6">
                 <div className="font-pixel text-[9px] text-[#00ff88] mb-3 tracking-wider">◈ LIVE BATTLES</div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  {liveGames.map(g => <GameCard key={g.id} game={g} />)}
+                  {liveGames.map(g => <GameCard key={g.id} game={g} civilization={selectedCiv} />)}
                 </div>
               </section>
             )}
@@ -346,20 +476,29 @@ export default function LobbyScreen() {
             {games.length === 0 && !loading && (
               <div className="text-center py-20">
                 <div className="font-pixel text-[10px] text-[#1a2a3a] mb-4">NO ACTIVE GAMES</div>
-                <button onClick={() => setShowCreate(true)} className="btn-cyan">
-                  CREATE THE FIRST GAME
-                </button>
+                {selectedCiv ? (
+                  <button onClick={() => setShowCreate(true)} className="btn-cyan">
+                    CREATE THE FIRST GAME
+                  </button>
+                ) : (
+                  <button onClick={handleNewCiv} className="btn-gray">
+                    CREATE A CIVILIZATION FIRST
+                  </button>
+                )}
               </div>
             )}
           </div>
         </div>
       </div>
 
-      {showCreate && <CreateGameModal onClose={() => setShowCreate(false)} />}
+      {showCreate && selectedCiv && (
+        <CreateGameModal onClose={() => setShowCreate(false)} civilization={selectedCiv} />
+      )}
       {showCivCreator && (
         <CivilizationCreator
           onComplete={handleCivComplete}
-          onCancel={() => setShowCivCreator(false)}
+          onCancel={() => { setShowCivCreator(false); setEditCivIdx(undefined); }}
+          initialCiv={editCivIdx !== undefined ? civs[editCivIdx] : undefined}
         />
       )}
     </div>

@@ -9,18 +9,15 @@ import ResearchPanel from './ResearchPanel';
 import DiplomacyPanel from './DiplomacyPanel';
 import ShipDesigner from './ShipDesigner';
 import AssemblyPanel from './AssemblyPanel';
+import ColoniesPanel from './ColoniesPanel';
 import EventLog from './EventLog';
 import { useRouter } from 'next/navigation';
 
 function TopBar() {
   const { currentGame, myEmpire, ui, setView, setPanel } = useGameStore();
-  const { signOut } = useAuthStore();
   const router = useRouter();
 
-  const leave = async () => {
-    await signOut();
-    router.push('/');
-  };
+  const leave = () => { router.push('/lobby'); };
 
   const activePanel = ui.activePanel;
 
@@ -61,6 +58,7 @@ function TopBar() {
 
       {/* Right: nav buttons */}
       <div className="flex items-center gap-1 flex-shrink-0">
+        {navBtn('colonies',   'COLONY', '#44ffaa')}
         {navBtn('research',   'LAB',    '#8888ff')}
         {navBtn('ships',      'SHIPS',  '#44aaff')}
         {navBtn('designer',   'DESIGN', '#ff8844')}
@@ -151,6 +149,7 @@ export default function HUD({ children }: { children: React.ReactNode }) {
 
   const rightPanel = () => {
     switch (ui.activePanel) {
+      case 'colonies':  return <ColoniesPanel />;
       case 'research':  return <ResearchPanel />;
       case 'ships':     return <ShipFleetPanel />;
       case 'designer':  return <ShipDesigner />;

@@ -74,7 +74,7 @@ export default function LoginScreen() {
 
         {/* Form */}
         <form onSubmit={handleSubmit} className="w-full pixel-panel-glow p-6 flex flex-col gap-5">
-          <div className="panel-header text-center">IDENTIFY YOURSELF</div>
+          <div className="panel-header text-center">WELCOME COMMANDER</div>
 
           <div className="flex flex-col gap-2">
             <input

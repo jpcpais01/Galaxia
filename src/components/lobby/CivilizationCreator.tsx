@@ -1,5 +1,5 @@
 'use client';
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import type {
   Civilization, SpeciesType, GovernmentType,
   CulturalFocus, CivTrait, OriginType, PlanetType,
@@ -45,11 +45,69 @@ const SPECIES_DATA: {
     effects: ['+35% on gas giant worlds', '+20% energy output'] },
 ];
 
-const EMBLEM_LIST = [
-  '⭐','🌟','✦','✧','⚡','🔥','❄','🌊','🌀','☄',
-  '🗡','⚔','🛡','🌙','☀','🌑','🔮','💎','🧬','🤖',
-  '👁','🦅','🐉','🌺','⚛','🪐','🌌','💀','⚙','🏛',
+// ── Pixel-art emblem definitions ─────────────────────────────────────────────
+// Each emblem is 8 rows of 8 pixels (1 row = 1 byte, MSB = leftmost pixel).
+// Rendered on a 16×16 canvas (2×2 px per logical pixel) → displayed at 40×40.
+
+export interface EmblemDef { id: string; label: string; rows: number[] }
+
+export const EMBLEM_DEFS: EmblemDef[] = [
+  { id: 'star',      label: 'Star',      rows: [0x18,0x18,0xFF,0x7E,0x3C,0x6C,0xC6,0x00] },
+  { id: 'diamond',   label: 'Diamond',   rows: [0x18,0x3C,0x7E,0xFF,0x7E,0x3C,0x18,0x00] },
+  { id: 'cross',     label: 'Cross',     rows: [0x18,0x18,0x18,0xFF,0xFF,0x18,0x18,0x18] },
+  { id: 'lightning', label: 'Lightning', rows: [0x0F,0x1E,0x3C,0xF8,0x1F,0x3C,0x78,0xF0] },
+  { id: 'shield',    label: 'Shield',    rows: [0xFF,0xFF,0xFF,0xFF,0x7E,0x3C,0x18,0x00] },
+  { id: 'arrow_up',  label: 'Arrow',     rows: [0x18,0x3C,0x7E,0xFF,0x18,0x18,0x18,0x18] },
+  { id: 'eye',       label: 'Eye',       rows: [0x00,0x7E,0xFF,0xDB,0xDB,0xFF,0x7E,0x00] },
+  { id: 'skull',     label: 'Skull',     rows: [0x3C,0x7E,0xDB,0xFF,0xFF,0x3C,0x66,0x66] },
+  { id: 'flame',     label: 'Flame',     rows: [0x18,0x3C,0x7E,0xFF,0xFF,0x7E,0x7E,0x3C] },
+  { id: 'crown',     label: 'Crown',     rows: [0x00,0x81,0xE7,0xFF,0xFF,0xFF,0xFF,0x00] },
+  { id: 'crescent',  label: 'Moon',      rows: [0x3C,0x7C,0xFC,0xF8,0xF8,0xFC,0x7C,0x3C] },
+  { id: 'sun',       label: 'Sun',       rows: [0x99,0x66,0x3C,0xFF,0xFF,0x3C,0x66,0x99] },
+  { id: 'atom',      label: 'Atom',      rows: [0x66,0xDB,0xBD,0xFF,0xFF,0xBD,0xDB,0x66] },
+  { id: 'gear',      label: 'Gear',      rows: [0x18,0xFF,0xFF,0xDB,0xDB,0xFF,0xFF,0x18] },
+  { id: 'tree',      label: 'Tree',      rows: [0x18,0x3C,0xFF,0xFF,0x3C,0x3C,0x7E,0x00] },
+  { id: 'sword',     label: 'Sword',     rows: [0x80,0xC0,0xE0,0x70,0x38,0x1C,0x0E,0x07] },
+  { id: 'hourglass', label: 'Hourglass', rows: [0xFF,0x7E,0x3C,0x18,0x18,0x3C,0x7E,0xFF] },
+  { id: 'target',    label: 'Target',    rows: [0x3C,0x42,0xA5,0x99,0x99,0xA5,0x42,0x3C] },
+  { id: 'spade',     label: 'Spade',     rows: [0x18,0x7E,0xFF,0xFF,0x7E,0x18,0x7E,0x00] },
+  { id: 'snowflake', label: 'Snowflake', rows: [0x99,0x5A,0x3C,0xFF,0xFF,0x3C,0x5A,0x99] },
+  { id: 'infinity',  label: 'Infinity',  rows: [0x00,0x66,0xDB,0xFF,0xFF,0xDB,0x66,0x00] },
+  { id: 'spiral',    label: 'Spiral',    rows: [0xFE,0x82,0xBA,0xA2,0xAA,0xB2,0x02,0xFE] },
+  { id: 'hex',       label: 'Hexagon',   rows: [0x3C,0x7E,0xFF,0xFF,0xFF,0xFF,0x7E,0x3C] },
+  { id: 'wave',      label: 'Wave',      rows: [0x00,0x66,0xFF,0x99,0x99,0xFF,0x66,0x00] },
+  { id: 'wings',     label: 'Wings',     rows: [0x42,0xE7,0xFF,0x3C,0x3C,0xFF,0xE7,0x42] },
+  { id: 'triangle',  label: 'Triangle',  rows: [0x18,0x3C,0x3C,0x7E,0x7E,0xFF,0xFF,0x00] },
+  { id: 'arrow_r',   label: 'Arrow →',   rows: [0x18,0x1C,0x1E,0xFF,0xFF,0x1E,0x1C,0x18] },
+  { id: 'dots',      label: '4 Points',  rows: [0xC3,0x42,0x24,0x18,0x18,0x24,0x42,0xC3] },
 ];
+
+export function EmblemCanvas({ emblemId, color, size = 40 }: { emblemId: string; color: string; size?: number }) {
+  const ref = useRef<HTMLCanvasElement>(null);
+  const def = EMBLEM_DEFS.find(e => e.id === emblemId) ?? EMBLEM_DEFS[0];
+  useEffect(() => {
+    const canvas = ref.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    ctx.clearRect(0, 0, 16, 16);
+    ctx.fillStyle = color;
+    for (let y = 0; y < 8; y++) {
+      const row = def.rows[y];
+      for (let x = 0; x < 8; x++) {
+        if (row & (0x80 >> x)) ctx.fillRect(x * 2, y * 2, 2, 2);
+      }
+    }
+  }, [emblemId, color, def]);
+  return (
+    <canvas
+      ref={ref}
+      width={16}
+      height={16}
+      style={{ width: size, height: size, imageRendering: 'pixelated', display: 'block' }}
+    />
+  );
+}
 
 const COLOR_PALETTE = [
   '#4488ff','#ff4455','#44ff88','#ffaa00',
@@ -200,7 +258,7 @@ interface CivDraft {
 
 const INITIAL_DRAFT: CivDraft = {
   speciesName: '', speciesType: 'humanoid',
-  primaryColor: '#4488ff', emblem: '⭐',
+  primaryColor: '#4488ff', emblem: EMBLEM_DEFS[0].id,
   homeWorldType: 'continental',
   government: 'democracy', culturalFocus: 'scientific',
   traits: [], origin: 'recent_uplift', motto: '',
@@ -271,7 +329,7 @@ function CivPreviewCard({ draft }: { draft: CivDraft }) {
         className="px-4 py-3 flex items-center gap-3 flex-shrink-0"
         style={{ background: draft.primaryColor + '18', borderBottom: `1px solid ${draft.primaryColor}33` }}
       >
-        <span className="text-3xl leading-none">{draft.emblem}</span>
+        <EmblemCanvas emblemId={draft.emblem} color={draft.primaryColor} size={44} />
         <div>
           <div className="font-pixel text-[13px]" style={{ color: draft.primaryColor }}>
             {draft.speciesName || '???'}
@@ -355,13 +413,25 @@ function Row({ label, value, dot }: { label: string; value: string; dot?: string
 // ─── Main component ───────────────────────────────────────────────────────────
 
 export default function CivilizationCreator({
-  onComplete, onCancel,
+  onComplete, onCancel, initialCiv,
 }: {
   onComplete: (civ: Civilization) => void;
   onCancel:   () => void;
+  initialCiv?: Civilization;
 }) {
   const [step,  setStep]  = useState(1);
-  const [draft, setDraft] = useState<CivDraft>({ ...INITIAL_DRAFT });
+  const [draft, setDraft] = useState<CivDraft>(initialCiv ? {
+    speciesName:   initialCiv.speciesName,
+    speciesType:   initialCiv.speciesType,
+    primaryColor:  initialCiv.primaryColor,
+    emblem:        EMBLEM_DEFS.some(e => e.id === initialCiv.emblem) ? initialCiv.emblem : EMBLEM_DEFS[0].id,
+    homeWorldType: initialCiv.homeWorldType,
+    government:    initialCiv.government,
+    culturalFocus: initialCiv.culturalFocus,
+    traits:        initialCiv.traits,
+    origin:        initialCiv.origin,
+    motto:         initialCiv.motto,
+  } : { ...INITIAL_DRAFT });
 
   const up = (patch: Partial<CivDraft>) => setDraft(d => ({ ...d, ...patch }));
 
@@ -484,19 +554,24 @@ export default function CivilizationCreator({
 
           <div>
             <label className="font-pixel text-[9px] text-[#5a7a8a] block mb-2">EMBLEM / SYMBOL</label>
-            <div className="grid grid-cols-10 gap-1">
-              {EMBLEM_LIST.map(e => (
+            <div className="grid grid-cols-7 gap-1.5">
+              {EMBLEM_DEFS.map(e => (
                 <button
-                  key={e}
-                  onClick={() => up({ emblem: e })}
-                  className="h-10 text-xl flex items-center justify-center border transition-all"
+                  key={e.id}
+                  onClick={() => up({ emblem: e.id })}
+                  title={e.label}
+                  className="h-12 flex items-center justify-center border transition-all"
                   style={{
-                    borderColor: draft.emblem === e ? draft.primaryColor : '#1a1a2a',
-                    background:  draft.emblem === e ? draft.primaryColor + '22' : '#050510',
-                    boxShadow:   draft.emblem === e ? `0 0 8px ${draft.primaryColor}44` : 'none',
+                    borderColor: draft.emblem === e.id ? draft.primaryColor : '#1a1a2a',
+                    background:  draft.emblem === e.id ? draft.primaryColor + '22' : '#050510',
+                    boxShadow:   draft.emblem === e.id ? `0 0 8px ${draft.primaryColor}44` : 'none',
                   }}
                 >
-                  {e}
+                  <EmblemCanvas
+                    emblemId={e.id}
+                    color={draft.emblem === e.id ? draft.primaryColor : '#4a6a7a'}
+                    size={28}
+                  />
                 </button>
               ))}
             </div>
@@ -504,10 +579,10 @@ export default function CivilizationCreator({
 
           <div className="flex items-center gap-4 p-4 border border-[#1a1a2a] bg-[#050510]">
             <div
-              className="w-16 h-16 flex items-center justify-center border-2 text-3xl"
+              className="w-16 h-16 flex items-center justify-center border-2"
               style={{ borderColor: draft.primaryColor, boxShadow: `0 0 16px ${draft.primaryColor}44` }}
             >
-              {draft.emblem}
+              <EmblemCanvas emblemId={draft.emblem} color={draft.primaryColor} size={48} />
             </div>
             <div>
               <div className="font-pixel text-[10px]" style={{ color: draft.primaryColor }}>
@@ -734,7 +809,7 @@ export default function CivilizationCreator({
               {/* Banner */}
               <div className="flex items-center gap-3 p-4 border-b border-[#1a1a2a]"
                 style={{ background: draft.primaryColor + '14' }}>
-                <span className="text-4xl">{draft.emblem}</span>
+                <EmblemCanvas emblemId={draft.emblem} color={draft.primaryColor} size={48} />
                 <div>
                   <div className="font-pixel text-[14px]" style={{ color: draft.primaryColor }}>
                     {draft.speciesName}

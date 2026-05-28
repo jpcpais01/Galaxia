@@ -30,7 +30,8 @@ interface AuthState {
   enter: (username: string, pin: string) => Promise<void>;
   signOut: () => void;
   clearError: () => void;
-  saveCivilization: (civ: Civilization) => Promise<void>;
+  saveCivilization: (civ: Civilization, editIndex?: number) => Promise<void>;
+  deleteCivilization: (index: number) => Promise<void>;
 }
 
 export const useAuthStore = create<AuthState>((set, get) => ({
@@ -118,11 +119,26 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   clearError: () => set({ error: null }),
 
-  saveCivilization: async (civ) => {
+  saveCivilization: async (civ, editIndex) => {
     const { player, user } = get();
     if (!player || !user) return;
-    const updated: Player = { ...player, civilization: civ };
-    await updateDoc(doc(db, 'users', user.uid), { civilization: civ });
+    const civs = [...(player.civilizations ?? (player.civilization ? [player.civilization] : []))];
+    if (editIndex !== undefined && editIndex >= 0 && editIndex < civs.length) {
+      civs[editIndex] = civ;
+    } else {
+      civs.push(civ);
+    }
+    const updated: Player = { ...player, civilization: civ, civilizations: civs };
+    await updateDoc(doc(db, 'users', user.uid), { civilization: civ, civilizations: civs });
+    set({ player: updated });
+  },
+
+  deleteCivilization: async (index) => {
+    const { player, user } = get();
+    if (!player || !user) return;
+    const civs = (player.civilizations ?? (player.civilization ? [player.civilization] : [])).filter((_, i) => i !== index);
+    const updated: Player = { ...player, civilizations: civs, civilization: civs[0] ?? undefined };
+    await updateDoc(doc(db, 'users', user.uid), { civilizations: civs, civilization: civs[0] ?? null });
     set({ player: updated });
   },
 }));

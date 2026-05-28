@@ -8,7 +8,7 @@ import { db } from '@/lib/firebase';
 import type {
   GameMeta, Empire, GameEvent, UIState, SystemState,
   InfraType, StationType, GroundOpType, Resources,
-  PendingSurvey, PendingColonization,
+  PendingSurvey, PendingColonization, Civilization,
 } from '@/types/game';
 import { generateGalaxy, findHomeSystem } from '@/lib/game/galaxy-generator';
 import { createBotEmpire, decideBotAction } from '@/lib/game/bot-ai';
@@ -21,8 +21,8 @@ interface GameStore {
   // Lobby
   games: GameMeta[];
   loadGames: () => Promise<void>;
-  createGame: (name: string, maxPlayers: number, botCount: number, hostPlayerId: string, hostUsername: string, starCount?: number) => Promise<string>;
-  joinGame: (gameId: string, playerId: string, username: string, color: string) => Promise<void>;
+  createGame: (name: string, maxPlayers: number, botCount: number, hostPlayerId: string, hostUsername: string, starCount?: number, civilization?: Civilization) => Promise<string>;
+  joinGame: (gameId: string, playerId: string, username: string, color: string, civilization?: Civilization) => Promise<void>;
   startGame: (gameId: string) => Promise<void>;
   deleteGame: (gameId: string) => Promise<void>;
 
@@ -91,7 +91,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     set({ games });
   },
 
-  createGame: async (name, maxPlayers, botCount, hostPlayerId, hostUsername, starCount = SYSTEM_COUNT) => {
+  createGame: async (name, maxPlayers, botCount, hostPlayerId, hostUsername, starCount = SYSTEM_COUNT, civilization?) => {
     const seed = Math.floor(Math.random() * 99999) + 1;
     const galaxy = generateGalaxy(seed, starCount);
 
@@ -124,7 +124,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       id: hostEmpireId,
       playerId: hostPlayerId,
       username: hostUsername,
-      color: EMPIRE_COLORS[0],
+      color: civilization?.primaryColor ?? EMPIRE_COLORS[0],
       isBot: false,
       homeSystemId: homeId,
       resources: { ...STARTING_RESOURCES, population: startPop },
@@ -143,6 +143,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       surveyedSystems: [homeId],
       pendingSurveys: [],
       pendingColonizations: [],
+      ...(civilization ? { civilization } : {}),
       isOnline: true,
       lastSeen: Date.now(),
       score: 0,
@@ -152,7 +153,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     return gameId;
   },
 
-  joinGame: async (gameId, playerId, username, color) => {
+  joinGame: async (gameId, playerId, username, color, civilization?) => {
     const snap = await getDoc(doc(db, 'games', gameId));
     const rawGame = snap.data() as Omit<GameMeta, 'galaxy'> & { seed: number; starCount?: number };
     const galaxy = generateGalaxy(rawGame.seed, rawGame.starCount ?? SYSTEM_COUNT);
@@ -173,7 +174,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       id: empireId,
       playerId,
       username,
-      color,
+      color: civilization?.primaryColor ?? color,
       isBot: false,
       homeSystemId: homeId,
       resources: { ...STARTING_RESOURCES, population: startPop },
@@ -192,6 +193,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       surveyedSystems: [homeId],
       pendingSurveys: [],
       pendingColonizations: [],
+      ...(civilization ? { civilization } : {}),
       isOnline: true,
       lastSeen: Date.now(),
       score: 0,

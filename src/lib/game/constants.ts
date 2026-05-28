@@ -112,6 +112,7 @@ export const GROUND_OP_CONFIG: Record<GroundOpType, {
   mineral_extractor:     { label: 'Mineral Extractor',  buildTicks: 10, mineralCost: 40,  energyCost: 5,  creditCost: 20, output: { minerals: 8 },           icon: '⛏',  description: 'Extracts mineral deposits without colonization' },
   atmospheric_processor: { label: 'Atmo Processor',     buildTicks: 15, mineralCost: 60,  energyCost: 10, creditCost: 35, output: { energy: 8, credits: 4 }, icon: '🌫', description: 'Harvests atmospheric gases for energy and trade' },
   deep_scanner:          { label: 'Deep Scanner',       buildTicks: 8,  mineralCost: 50,  energyCost: 8,  creditCost: 30, output: { research: 6 },            icon: '📡', description: 'Scans the planetary core for research data' },
+  solar_collector:       { label: 'Solar Collector',    buildTicks: 12, mineralCost: 60,  energyCost: 0,  creditCost: 40, output: { energy: 12 },            icon: '☀',  description: 'Orbital array harvesting direct stellar radiation' },
 };
 
 export const EMPIRE_COLORS = [

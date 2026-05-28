@@ -13,7 +13,7 @@ export type InfraType =
   | 'research_lab' | 'ai_datacenter' | 'trade_hub' | 'colony_hub'
   | 'defense_battery' | 'shipyard';
 
-export type GroundOpType = 'mineral_extractor' | 'atmospheric_processor' | 'deep_scanner';
+export type GroundOpType = 'mineral_extractor' | 'atmospheric_processor' | 'deep_scanner' | 'solar_collector';
 
 export type ResearchPath = 'physics' | 'biology' | 'engineering' | 'ai';
 
@@ -318,7 +318,8 @@ export interface Player {
   gamesPlayed: number;
   wins: number;
   createdAt: number;
-  civilization?: Civilization;
+  civilization?: Civilization;      // legacy / last-used
+  civilizations?: Civilization[];   // all saved civilizations
 }
 
 // ─── Civilization ─────────────────────────────────────────────────────────────
@@ -366,7 +367,7 @@ export interface UIState {
   view: GameView;
   selectedSystemId: string | null;
   selectedPlanetId: string | null;
-  activePanel: 'none' | 'build' | 'research' | 'ships' | 'diplomacy' | 'assembly' | 'designer';
+  activePanel: 'none' | 'build' | 'research' | 'ships' | 'diplomacy' | 'assembly' | 'designer' | 'colonies';
   hoverSystemId: string | null;
   cameraX: number;
   cameraY: number;
