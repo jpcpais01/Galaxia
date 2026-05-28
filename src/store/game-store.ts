@@ -81,6 +81,29 @@ interface GameStore {
   processTick: () => Promise<void>;
 }
 
+// ─── Civilization helpers ──────────────────────────────────────────────────────
+
+function applyOriginBonus(resources: Resources, civ?: Civilization): Resources {
+  if (!civ) return resources;
+  const r = { ...resources };
+  switch (civ.origin) {
+    case 'ancient_empire':
+      r.research += 200;
+      r.compute  += 100;
+      break;
+    case 'recent_uplift':
+      r.credits  += 500;
+      r.minerals += 300;
+      break;
+    case 'merchant_guild':
+      r.credits  += 600;
+      break;
+    // 'warrior_clans': +25% combat — applied at ship-build time
+    // 'refugee_fleet': +3 ships — complex, skip starting ships for now
+  }
+  return r;
+}
+
 const DEFAULT_UI: UIState = {
   view: 'galaxy',
   selectedSystemId: null,
@@ -137,6 +160,10 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const { galaxy: _g, ...gameDoc } = game;
     await setDoc(doc(db, 'games', gameId), gameDoc);
 
+    const startResources = applyOriginBonus(
+      { ...STARTING_RESOURCES, population: startPop },
+      civilization
+    );
     const empire: Empire = {
       id: hostEmpireId,
       playerId: hostPlayerId,
@@ -144,7 +171,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       color: civilization?.primaryColor ?? EMPIRE_COLORS[0],
       isBot: false,
       homeSystemId: homeId,
-      resources: { ...STARTING_RESOURCES, population: startPop },
+      resources: startResources,
       resourceRates: { energy: 5, food: 0, minerals: 0, research: 5, compute: 0, credits: 10, population: 0 },
       controlledSystems: [homeId],
       colonizedPlanets: homePlanet ? [homePlanet.id] : [],
@@ -162,7 +189,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
       surveyedSystems: [homeId],
       pendingSurveys: [],
       pendingColonizations: [],
-      ...(civilization ? { civilization } : {}),
+      ...(civilization   ? { civilization }              : {}),
+      ...(homePlanet     ? { homePlanetId: homePlanet.id } : {}),
       isOnline: true,
       lastSeen: Date.now(),
       score: 0,
@@ -189,6 +217,10 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const homeStation = { id: `stn_home_${empireId}`, type: 'space_station' as StationType, systemId: homeId, level: 1, ownerId: empireId, buildStartedTick: 0, buildCompletedTick: 0 };
     const startPop    = homePlanet ? 10 + (homePlanet.size - 1) * 2 : 10;
 
+    const startResources = applyOriginBonus(
+      { ...STARTING_RESOURCES, population: startPop },
+      civilization
+    );
     const empire: Empire = {
       id: empireId,
       playerId,
@@ -196,7 +228,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       color: civilization?.primaryColor ?? color,
       isBot: false,
       homeSystemId: homeId,
-      resources: { ...STARTING_RESOURCES, population: startPop },
+      resources: startResources,
       resourceRates: { energy: 5, food: 0, minerals: 0, research: 5, compute: 0, credits: 10, population: 0 },
       controlledSystems: [homeId],
       colonizedPlanets: homePlanet ? [homePlanet.id] : [],
@@ -214,7 +246,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
       surveyedSystems: [homeId],
       pendingSurveys: [],
       pendingColonizations: [],
-      ...(civilization ? { civilization } : {}),
+      ...(civilization ? { civilization }              : {}),
+      ...(homePlanet   ? { homePlanetId: homePlanet.id } : {}),
       isOnline: true,
       lastSeen: Date.now(),
       score: 0,
@@ -306,11 +339,21 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const empireSub = onSnapshot(collection(db, 'games', gameId, 'empires'), snap => {
       const empires = snap.docs.map(d => d.data() as Empire);
       const myEmpire = empires.find(e => e.playerId === playerId) ?? null;
-      // Mark colonizable planets in every empire's home system as resource-rich
+      // Apply per-empire galaxy mutations (deterministic on all clients)
       if (cachedGalaxy) {
         for (const empire of empires) {
           const homeSys = cachedGalaxy.systems.find(s => s.id === empire.homeSystemId);
-          if (homeSys) homeSys.planets.forEach(p => { if (p.colonizable) p.hasResources = true; });
+          if (!homeSys) continue;
+          // Mark home-system colonizable planets as resource-rich
+          homeSys.planets.forEach(p => { if (p.colonizable) p.hasResources = true; });
+          // Override home planet type to match civilization's chosen homeWorldType
+          if (empire.homePlanetId && empire.civilization?.homeWorldType) {
+            const hp = homeSys.planets.find(p => p.id === empire.homePlanetId);
+            if (hp) {
+              hp.type = empire.civilization.homeWorldType;
+              hp.colonizable = true;
+            }
+          }
         }
       }
       set({ empires, myEmpire });
@@ -547,6 +590,25 @@ export const useGameStore = create<GameStore>((set, get) => ({
     );
     if (!hasGroundShipyard && !hasOrbitalShipyard) return;
 
+    // Apply civilization bonuses to ship stats at build time
+    const civ = myEmpire.civilization;
+    let hpMult    = 1;
+    let speedMult = 1;
+    let atkMult   = 1;
+    let defMult   = 1;
+    if (civ) {
+      if (civ.traits.includes('resilient'))      hpMult    *= 1.20;
+      if (civ.traits.includes('fragile'))        hpMult    *= 0.80;
+      if (civ.traits.includes('swift'))          speedMult *= 1.20;
+      if (civ.traits.includes('sluggish'))       speedMult *= 0.80;
+      if (civ.culturalFocus === 'militaristic')  { hpMult *= 1.15; atkMult *= 1.15; }
+      if (civ.culturalFocus === 'isolationist')  defMult   *= 1.35;
+      if (civ.government   === 'military_junta') atkMult   *= 1.25;
+      if (civ.origin       === 'warrior_clans')  atkMult   *= 1.25;
+      if (civ.speciesType  === 'fungal')         speedMult *= 0.85;
+      if (civ.speciesType  === 'crystalline')    hpMult    *= 0.85; // -15% ship HP
+    }
+    const baseHp = design.tiles.reduce((s, t) => s + t.hp, 0);
     const ship = {
       id: `ship_${Date.now()}`,
       designId: design.id,
@@ -554,11 +616,11 @@ export const useGameStore = create<GameStore>((set, get) => ({
       name: `${design.name} ${myEmpire.ships.length + 1}`,
       ownerId: myEmpire.id,
       systemId,
-      hp: design.tiles.reduce((s, t) => s + t.hp, 0),
-      maxHp: design.tiles.reduce((s, t) => s + t.hp, 0),
-      attack: design.attack,
-      defense: design.defense,
-      speed: design.speed,
+      hp:      Math.max(1, Math.round(baseHp           * hpMult)),
+      maxHp:   Math.max(1, Math.round(baseHp           * hpMult)),
+      attack:  Math.round(design.attack  * atkMult),
+      defense: Math.round(design.defense * defMult),
+      speed:   Math.max(1, Math.round(design.speed     * speedMult)),
       tiles: design.tiles.map(t => ({ ...t })),
       buildCompletedTick: currentGame.tick + design.buildTicks,
     };

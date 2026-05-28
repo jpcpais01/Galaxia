@@ -2,6 +2,120 @@ import type { Empire, Resources, Infrastructure } from '@/types/game';
 import { INFRA_CONFIG, STATION_CONFIG, GROUND_OP_CONFIG, ORBITAL_CONFIG } from './constants';
 import { RESEARCH_BY_ID } from './research-tree';
 
+// ─── Civilization production bonus helper ──────────────────────────────────────
+// Applied to production rates BEFORE population consumption so multipliers
+// affect net output, not consumption side-effects.
+
+function applyCivProductionBonuses(empire: Empire, rates: Resources): void {
+  const civ = empire.civilization;
+  if (!civ) return;
+
+  // ── Species ───────────────────────────────────────────────────────────────
+  switch (civ.speciesType) {
+    case 'humanoid':
+      // +10% all production
+      (Object.keys(rates) as (keyof Resources)[]).forEach(k => {
+        if (rates[k] > 0) rates[k] = Math.round(rates[k] * 1.10);
+      });
+      break;
+    case 'fungal':
+      if (rates.research > 0) rates.research = Math.round(rates.research * 1.30);
+      break;
+    case 'synthetic':
+      if (rates.compute  > 0) rates.compute  = Math.round(rates.compute  * 1.35);
+      break;
+    case 'crystalline':
+      if (rates.energy   > 0) rates.energy   = Math.round(rates.energy   * 1.30);
+      break;
+    case 'psionic':
+      if (rates.research > 0) rates.research = Math.round(rates.research * 1.25);
+      break;
+    case 'gaseous':
+      if (rates.energy   > 0) rates.energy   = Math.round(rates.energy   * 1.20);
+      break;
+    case 'aquatic': {
+      const hw = civ.homeWorldType;
+      if (hw === 'ocean' || hw === 'swamp' || hw === 'deep_ocean') {
+        (Object.keys(rates) as (keyof Resources)[]).forEach(k => {
+          if (rates[k] > 0) rates[k] = Math.round(rates[k] * 1.35);
+        });
+      } else if (hw === 'arid' || hw === 'desert' || hw === 'volcanic') {
+        (Object.keys(rates) as (keyof Resources)[]).forEach(k => {
+          if (rates[k] > 0) rates[k] = Math.round(rates[k] * 0.80);
+        });
+      }
+      break;
+    }
+    // insectoid: build speed only (handled in getBuildSpeedMultiplier)
+  }
+
+  // ── Government ────────────────────────────────────────────────────────────
+  switch (civ.government) {
+    case 'democracy':
+      if (rates.credits  > 0) rates.credits  = Math.round(rates.credits  * 1.20);
+      break;
+    case 'theocracy':
+      if (rates.research > 0) rates.research = Math.round(rates.research * 1.20);
+      if (rates.credits  > 0) rates.credits  = Math.round(rates.credits  * 0.85);
+      break;
+    case 'oligarchy':
+      if (rates.credits    > 0) rates.credits    = Math.round(rates.credits    * 1.30);
+      if (rates.population > 0) rates.population = Math.round(rates.population * 0.85);
+      break;
+    case 'military_junta':
+      if (rates.research > 0) rates.research = Math.round(rates.research * 0.80);
+      break;
+    case 'federation':
+      if (rates.credits  > 0) rates.credits  = Math.round(rates.credits  * 1.15);
+      break;
+    // hive_mind: build speed only
+  }
+
+  // ── Cultural focus ────────────────────────────────────────────────────────
+  switch (civ.culturalFocus) {
+    case 'scientific':
+      if (rates.research > 0) rates.research = Math.round(rates.research * 1.35);
+      break;
+    case 'commercial':
+      if (rates.credits  > 0) rates.credits  = Math.round(rates.credits  * 1.35);
+      break;
+    // militaristic, isolationist: ship bonuses at build time
+    // expansionist: colonization time, handled elsewhere
+    // diplomatic: no direct resource rate effect
+  }
+
+  // ── Traits ────────────────────────────────────────────────────────────────
+  for (const trait of (civ.traits ?? [])) {
+    switch (trait) {
+      case 'industrious':
+        if (rates.minerals   > 0) rates.minerals   = Math.round(rates.minerals   * 1.20);
+        break;
+      case 'intelligent':
+        if (rates.research   > 0) rates.research   = Math.round(rates.research   * 1.20);
+        break;
+      case 'entrepreneurial':
+        if (rates.credits    > 0) rates.credits    = Math.round(rates.credits    * 1.20);
+        break;
+      case 'populous':
+        if (rates.population > 0) rates.population = Math.round(rates.population * 1.25);
+        break;
+      case 'wasteful':
+        // -15% ALL resource production (positive rates only)
+        (Object.keys(rates) as (keyof Resources)[]).forEach(k => {
+          if (k !== 'population' && rates[k] > 0) rates[k] = Math.round(rates[k] * 0.85);
+        });
+        break;
+      case 'primitive':
+        if (rates.research   > 0) rates.research   = Math.round(rates.research   * 0.80);
+        break;
+      // resilient, fragile, swift, sluggish: applied at ship build time
+      // adaptive: colonization logic; psychic, xenophobic: diplomacy
+    }
+  }
+}
+
+// ─── Main computation ──────────────────────────────────────────────────────────
+
 export function computeResourceRates(empire: Empire, currentTick = 0): Resources {
   const rates: Resources = {
     energy: 5,
@@ -45,13 +159,6 @@ export function computeResourceRates(empire: Empire, currentTick = 0): Resources
     }
   }
 
-  // Population: consumes food & energy, produces credits & research
-  const pop = empire.resources.population;
-  rates.food     -= Math.ceil(pop * 0.5);
-  rates.energy   -= Math.ceil(pop * 0.2);
-  rates.credits  += Math.floor(pop * 0.5);
-  rates.research += Math.floor(pop / 3);
-
   // Stations that have completed building
   for (const station of empire.stations) {
     if (station.buildCompletedTick > currentTick) continue;
@@ -64,6 +171,23 @@ export function computeResourceRates(empire: Empire, currentTick = 0): Resources
       rates.research += 8 * bonus;
     }
   }
+
+  // ── Apply civilization production bonuses ─────────────────────────────────
+  // (done before population consumption so multipliers scale output, not loss)
+  applyCivProductionBonuses(empire, rates);
+
+  // ── Population: consumption and derived output ────────────────────────────
+  const pop = empire.resources.population;
+
+  const isSynthetic = empire.civilization?.speciesType === 'synthetic';
+  const hungerMult  = empire.civilization?.traits?.includes('hungry') ? 1.5 : 1;
+
+  if (!isSynthetic) {
+    rates.food -= Math.ceil(pop * 0.5 * hungerMult);
+  }
+  rates.energy   -= Math.ceil(pop * 0.2);
+  rates.credits  += Math.floor(pop * 0.5);
+  rates.research += Math.floor(pop / 3);
 
   return rates;
 }
@@ -84,7 +208,17 @@ export function getResearchBonuses(empire: Empire, type: string): Record<string,
 
 export function getBuildSpeedMultiplier(empire: Empire, category: 'infrastructure' | 'station' | 'ship'): number {
   const bonuses = getResearchBonuses(empire, 'build_speed');
-  return 1 + (bonuses[category] ?? 0) / 100;
+  let mult = 1 + (bonuses[category] ?? 0) / 100;
+
+  // Civilization bonuses
+  const civ = empire.civilization;
+  if (civ) {
+    if (civ.speciesType === 'insectoid') mult *= 1.25;
+    if (civ.government  === 'hive_mind') mult *= 1.25;
+    if (civ.government  === 'democracy') mult *= 0.90;
+  }
+
+  return mult;
 }
 
 export function applyTick(empire: Empire, currentTick: number): Partial<Empire> {
@@ -96,13 +230,17 @@ export function applyTick(empire: Empire, currentTick: number): Partial<Empire> 
   }
 
   // Colony Hub first-activation bonus: +10 pop one-time
+  // (populous trait gives +25% on hub activations)
   let hubBonus = 0;
   for (const infra of empire.infrastructure) {
     if (infra.type === 'colony_hub' && !infra.active && infra.buildCompletedTick <= currentTick) {
       hubBonus += 10;
     }
   }
-  if (hubBonus > 0) newResources.population += hubBonus;
+  if (hubBonus > 0) {
+    const popMult = empire.civilization?.traits?.includes('populous') ? 1.25 : 1;
+    newResources.population += Math.round(hubBonus * popMult);
+  }
 
   // Famine: if food goes negative, population declines
   if (newResources.food <= 0) {

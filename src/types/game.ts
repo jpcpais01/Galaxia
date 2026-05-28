@@ -292,6 +292,7 @@ export interface Empire {
   pendingSurveys: PendingSurvey[];
   pendingColonizations: PendingColonization[];
   civilization?: Civilization;
+  homePlanetId?: string;
   isOnline: boolean;
   lastSeen: number;
   score: number;
