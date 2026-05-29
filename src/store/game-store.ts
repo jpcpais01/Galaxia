@@ -2,7 +2,7 @@
 import { create } from 'zustand';
 import {
   doc, collection, setDoc, updateDoc, onSnapshot, getDocs,
-  query, orderBy, limit, runTransaction, addDoc, arrayUnion, getDoc, deleteDoc,
+  query, orderBy, limit, runTransaction, addDoc, arrayUnion, getDoc, deleteDoc, writeBatch,
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import type {
@@ -16,7 +16,7 @@ import { createBotEmpire, runBotTurn } from '@/lib/game/bot-ai';
 import { applyTick, canAfford, deductCosts, countUsedSlots } from '@/lib/game/economy';
 import { resolveAssembly, checkVictory, ANOMALY_GRANTS } from '@/lib/game/world';
 import { ANOMALY_EFFECTS } from '@/lib/game/constants';
-import { INFRA_CONFIG, STATION_CONFIG, GROUND_OP_CONFIG, ORBITAL_CONFIG, EMPIRE_COLORS, STARTING_RESOURCES, GAME_TICK_MS, SYSTEM_COUNT } from '@/lib/game/constants';
+import { INFRA_CONFIG, STATION_CONFIG, GROUND_OP_CONFIG, ORBITAL_CONFIG, INFRA_RESEARCH_REQUIRED, EMPIRE_COLORS, STARTING_RESOURCES, GAME_TICK_MS, SYSTEM_COUNT } from '@/lib/game/constants';
 import { STARTER_DESIGNS, instantiateShip } from '@/lib/game/ship-designer';
 import { resolveAllCombat } from '@/lib/game/combat';
 
@@ -609,6 +609,10 @@ export const useGameStore = create<GameStore>((set, get) => ({
     if (!currentGame || !myEmpire) return;
     if (!myEmpire.colonizedPlanets.includes(planetId)) return;
 
+    // Research-gated infrastructure
+    const reqResearch = INFRA_RESEARCH_REQUIRED[type];
+    if (reqResearch && !myEmpire.completedResearch.includes(reqResearch)) return;
+
     const cfg = INFRA_CONFIG[type];
     if (!canAfford(myEmpire.resources, cfg)) return;
 
@@ -1033,6 +1037,13 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const empiresAfterTick: Record<string, Empire> = {};
     const eventsToEmit: GameEvent[] = [];
 
+    // All Firestore writes for this tick are accumulated and committed in
+    // batched chunks at the end — far fewer round-trips than serial updateDocs.
+    type WriteOp = { kind: 'update' | 'set'; ref: ReturnType<typeof doc>; data: Record<string, unknown> };
+    const writes: WriteOp[] = [];
+    const pushUpdate = (ref: ReturnType<typeof doc>, data: Record<string, unknown>) => writes.push({ kind: 'update', ref, data });
+    const empireRef = (id: string) => doc(db, 'games', currentGame.id, 'empires', id);
+
     for (const empire of empires) {
       const updates = applyTick(empire, newTick);
 
@@ -1102,7 +1113,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       // ── Bot turn (produces a patch we merge before writing) ───────────────
       const botSSW: { path: string; value: unknown }[] = [];
       if (empire.isBot && newTick % 2 === 0) {
-        const res = runBotTurn(merged, currentGame, newTick);
+        const res = runBotTurn(merged, currentGame, newTick, empires);
         merged = { ...merged, ...res.patch } as Empire;
         eventsToEmit.push(...res.events);
         botSSW.push(...res.systemStateWrites);
@@ -1110,8 +1121,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
       empiresAfterTick[empire.id] = merged;
 
-      // ── Single empire write ───────────────────────────────────────────────
-      await updateDoc(doc(db, 'games', currentGame.id, 'empires', empire.id), {
+      // ── Single empire write (accumulated) ─────────────────────────────────
+      pushUpdate(empireRef(empire.id), {
         resources:            merged.resources,
         resourceRates:        merged.resourceRates,
         infrastructure:       merged.infrastructure,
@@ -1136,15 +1147,48 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
       // ── Game-doc systemState writes ───────────────────────────────────────
       for (const sysId of newlySurveyed) {
-        await updateDoc(gameRef, { [`systemStates.${sysId}.surveyedBy`]: arrayUnion(empire.id) });
+        pushUpdate(gameRef, { [`systemStates.${sysId}.surveyedBy`]: arrayUnion(empire.id) });
       }
       for (const stn of newlyBuilt) {
-        await updateDoc(gameRef, { [`systemStates.${stn.systemId}.ownerId`]: empire.id });
+        pushUpdate(gameRef, { [`systemStates.${stn.systemId}.ownerId`]: empire.id });
       }
       for (const w of botSSW) {
         const value = w.value === 'ARRAY_UNION' ? arrayUnion(empire.id) : w.value;
-        await updateDoc(gameRef, { [w.path]: value });
+        pushUpdate(gameRef, { [w.path]: value });
       }
+    }
+
+    // ─── Bots accept beneficial diplomacy proposals ──────────────────────────
+    const ACCEPTABLE = new Set(['trade_partner', 'non_aggression', 'allied', 'trade']);
+    for (const bot of Object.values(empiresAfterTick)) {
+      if (!bot.isBot) continue;
+      const pendingRels = (bot.diplomacy ?? []).filter(d => d.proposalPending && ACCEPTABLE.has(d.proposalPending.type));
+      if (pendingRels.length === 0) continue;
+      let myDip = (bot.diplomacy ?? []).map(d => ({ ...d }));
+      for (const rel of pendingRels) {
+        const status = (rel.proposalPending!.type === 'trade' ? 'trade_partner' : rel.proposalPending!.type) as import('@/types/game').DiplomacyStatus;
+        myDip = myDip.map(d => d.empireId === rel.empireId ? { ...d, status, proposalPending: undefined } : d);
+        // Update the proposer's side too
+        const other = empiresAfterTick[rel.empireId];
+        if (other) {
+          let otherDip = (other.diplomacy ?? []).map(d => ({ ...d }));
+          if (otherDip.some(d => d.empireId === bot.id)) {
+            otherDip = otherDip.map(d => d.empireId === bot.id ? { ...d, status } : d);
+          } else {
+            otherDip.push({ empireId: bot.id, status, tradeDeals: [] });
+          }
+          other.diplomacy = otherDip;
+          pushUpdate(empireRef(other.id), { diplomacy: otherDip });
+        }
+        eventsToEmit.push({
+          id: `evt_${newTick}_dipacc_${bot.id}_${rel.empireId}`,
+          type: 'diplomacy',
+          message: `${bot.username} accepted a ${status.replace(/_/g, ' ')} agreement`,
+          tick: newTick, empireId: bot.id, targetEmpireId: rel.empireId,
+        });
+      }
+      bot.diplomacy = myDip;
+      pushUpdate(empireRef(bot.id), { diplomacy: myDip });
     }
 
     // ─── Combat resolution (one simultaneous round per tick) ──────────────────
@@ -1159,7 +1203,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       };
       if (deltas.controlledChanged.has(empireId)) patch.controlledSystems = deltas.controlledUpdates[empireId];
       if (deltas.colonizedChanged.has(empireId))  patch.colonizedPlanets  = deltas.colonizedUpdates[empireId];
-      await updateDoc(doc(db, 'games', currentGame.id, 'empires', empireId), patch);
+      pushUpdate(empireRef(empireId), patch);
 
       // Reflect combat results in the in-memory snapshot for assembly/victory
       const e = empiresAfterTick[empireId];
@@ -1174,31 +1218,46 @@ export const useGameStore = create<GameStore>((set, get) => ({
     }
 
     for (const sysId of deltas.ownershipCleared) {
-      await updateDoc(gameRef, {
+      pushUpdate(gameRef, {
         [`systemStates.${sysId}.ownerId`]: null,
         [`systemStates.${sysId}.stationId`]: null,
       });
     }
     eventsToEmit.push(...deltas.events);
 
-    // ─── Galactic Assembly: close & apply resolutions ─────────────────────────
-    const assembly = resolveAssembly(Object.values(empiresAfterTick), currentGame, newTick);
+    // ─── Galactic Assembly: bots vote (self-interest), then close & apply ─────
+    const assemblyState = (currentGame.assembly ?? []).map(v => ({ ...v, votes: { ...v.votes } }));
+    let assemblyDirty = false;
+    for (const v of assemblyState) {
+      if (v.resolved || newTick > v.closesAtTick) continue;
+      for (const e of Object.values(empiresAfterTick)) {
+        if (!e.isBot || v.votes[e.id] !== undefined) continue;
+        // Resource grants benefit everyone → AYE. Peace → AYE only if at war.
+        const atWar = (e.diplomacy ?? []).some(d => d.status === 'at_war');
+        v.votes[e.id] = v.effect === 'galactic_peace' ? atWar : true;
+        assemblyDirty = true;
+      }
+    }
+    const assembly = resolveAssembly(Object.values(empiresAfterTick), { ...currentGame, assembly: assemblyState }, newTick);
+    const finalAssembly = assembly.changed ? assembly.updatedAssembly : assemblyState;
+    if (assembly.changed || assemblyDirty) {
+      pushUpdate(gameRef, { assembly: finalAssembly });
+    }
     if (assembly.changed) {
-      await updateDoc(gameRef, { assembly: assembly.updatedAssembly });
       for (const [eid, grant] of Object.entries(assembly.grants)) {
         const e = empiresAfterTick[eid];
         if (!e) continue;
         const res = { ...e.resources };
         for (const [k, v] of Object.entries(grant) as [keyof Resources, number][]) res[k] = (res[k] ?? 0) + v;
         e.resources = res;
-        await updateDoc(doc(db, 'games', currentGame.id, 'empires', eid), { resources: res });
+        pushUpdate(empireRef(eid), { resources: res });
       }
       for (const eid of Array.from(assembly.peaceEmpireIds)) {
         const e = empiresAfterTick[eid];
         if (!e || !(e.diplomacy ?? []).some(d => d.status === 'at_war')) continue;
         const dip = e.diplomacy.map(d => d.status === 'at_war' ? { ...d, status: 'neutral' as const } : d);
         e.diplomacy = dip;
-        await updateDoc(doc(db, 'games', currentGame.id, 'empires', eid), { diplomacy: dip });
+        pushUpdate(empireRef(eid), { diplomacy: dip });
       }
       eventsToEmit.push(...assembly.events);
     }
@@ -1206,7 +1265,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     // ─── Victory check ────────────────────────────────────────────────────────
     const vic = checkVictory(Object.values(empiresAfterTick), { ...currentGame, tick: newTick }, newTick);
     if (vic) {
-      await updateDoc(gameRef, {
+      pushUpdate(gameRef, {
         status: 'finished',
         winnerId: vic.winnerId,
         winnerName: vic.winnerName,
@@ -1220,9 +1279,17 @@ export const useGameStore = create<GameStore>((set, get) => ({
       });
     }
 
-    // ─── Emit all accumulated events ──────────────────────────────────────────
+    // ─── Commit everything in batched chunks (few round-trips) ────────────────
     for (const evt of eventsToEmit) {
-      await addDoc(collection(db, 'games', currentGame.id, 'events'), evt);
+      writes.push({ kind: 'set', ref: doc(collection(db, 'games', currentGame.id, 'events')), data: evt as unknown as Record<string, unknown> });
+    }
+    for (let i = 0; i < writes.length; i += 400) {
+      const batch = writeBatch(db);
+      for (const op of writes.slice(i, i + 400)) {
+        if (op.kind === 'set') batch.set(op.ref, op.data);
+        else batch.update(op.ref, op.data);
+      }
+      await batch.commit();
     }
   },
 }));

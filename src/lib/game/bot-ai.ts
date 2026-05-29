@@ -2,7 +2,7 @@ import type {
   Empire, GameMeta, ShipDesign, GameEvent, Resources, InfraType,
 } from '@/types/game';
 import { SeededRandom } from '@/lib/noise';
-import { INFRA_CONFIG, STATION_CONFIG, EMPIRE_COLORS, STARTING_RESOURCES } from './constants';
+import { INFRA_CONFIG, STATION_CONFIG, ORBITAL_CONFIG, EMPIRE_COLORS, STARTING_RESOURCES } from './constants';
 import { canAfford, deductCosts, countUsedSlots } from './economy';
 import { RESEARCH_TREE } from './research-tree';
 import { instantiateShip } from './ship-designer';
@@ -94,7 +94,7 @@ function findAttackTarget(empire: Empire, game: GameMeta): { systemId: string; o
 
 // ─── Main bot turn ─────────────────────────────────────────────────────────────
 
-export function runBotTurn(empire: Empire, game: GameMeta, tick: number): BotResult {
+export function runBotTurn(empire: Empire, game: GameMeta, tick: number, allEmpires: Empire[] = []): BotResult {
   const rng = new SeededRandom(tick * 31337 + (empire.id.charCodeAt(4) || 7));
   const events: GameEvent[] = [];
   const ssw: { path: string; value: unknown }[] = [];
@@ -108,11 +108,21 @@ export function runBotTurn(empire: Empire, game: GameMeta, tick: number): BotRes
   let stations   = [...empire.stations];
   let ships      = [...empire.ships];
   let fleets     = (empire.fleets ?? []).map(f => ({ ...f }));
+  const orbitals = [...(empire.orbitalStructures ?? [])];
+  const pendingInv = [...(empire.pendingInvestigations ?? [])];
+  const resolvedAnom = new Set(empire.resolvedAnomalies ?? []);
   let researchQueue = empire.researchQueue;
   let researchProgress = empire.researchProgress;
 
   const touched = { surveyed: false, colonized: false, controlled: false, infra: false,
-    stations: false, ships: false, fleets: false, research: false, resources: false };
+    stations: false, ships: false, fleets: false, research: false, resources: false,
+    orbitals: false, investigations: false };
+
+  // Threat detection: is any other empire's fleet sitting in our controlled space?
+  const myControlled = new Set(controlled);
+  const homeThreatened = allEmpires.some(o =>
+    o.id !== empire.id &&
+    (o.fleets ?? []).some(f => f.state !== 'in_transit' && myControlled.has(f.systemId)));
 
   // 0. Bootstrap home system
   if (controlled.length === 0) {
@@ -140,6 +150,23 @@ export function runBotTurn(empire: Empire, game: GameMeta, tick: number): BotRes
   if (!researchQueue) {
     const node = nextResearch(empire);
     if (node) { researchQueue = node; researchProgress = 0; touched.research = true; }
+  }
+
+  // 1b. Investigate an anomaly in surveyed space (host applies fallback grants)
+  if (r.credits >= 120 && r.research >= 40 && rng.next() < 0.5) {
+    const pendingPlanets = new Set(pendingInv.map(p => p.planetId));
+    outer: for (const sysId of surveyed) {
+      const sys = game.galaxy.systems.find(s => s.id === sysId);
+      if (!sys) continue;
+      for (const p of sys.planets) {
+        if (p.hasAnomaly && p.anomalyType && !resolvedAnom.has(p.id) && !pendingPlanets.has(p.id)) {
+          pendingInv.push({ planetId: p.id, systemId: sysId, anomalyType: p.anomalyType, completesAtTick: tick + 6 });
+          r.credits -= 120; r.research -= 40;
+          touched.investigations = true; touched.resources = true;
+          break outer;
+        }
+      }
+    }
   }
 
   // 2. Colonize a planet in controlled space
@@ -200,6 +227,28 @@ export function runBotTurn(empire: Empire, game: GameMeta, tick: number): BotRes
     ssw.push({ path: `systemStates.${claim}.stationId`, value: sid });
   }
 
+  // 5b. Fortify: build a defense platform over a colonised world (esp. when threatened)
+  if ((homeThreatened || rng.next() < 0.2)) {
+    const cfg = ORBITAL_CONFIG.defense_platform;
+    if (canAfford(r, cfg)) {
+      for (const sysId of controlled) {
+        const sys = game.galaxy.systems.find(s => s.id === sysId);
+        if (!sys) continue;
+        const planet = sys.planets.find(p => colonized.includes(p.id) && !orbitals.some(o => o.planetId === p.id && o.type === 'defense_platform'));
+        if (!planet) continue;
+        Object.assign(r, deductCosts(r, cfg)); touched.resources = true;
+        orbitals.push({
+          id: `orb_${tick}_${empire.id}_${orbitals.length}`,
+          type: 'defense_platform', planetId: planet.id, systemId: sysId,
+          buildStartedTick: tick, buildCompletedTick: tick + cfg.buildTicks,
+          active: false, hp: cfg.hp, maxHp: cfg.hp,
+        });
+        touched.orbitals = true;
+        break;
+      }
+    }
+  }
+
   // 6. Build a warship at a shipyard system
   const shipyardSys = infra.find(i => i.type === 'shipyard' && i.active)?.systemId
     ?? infra.find(i => i.type === 'shipyard')?.systemId;
@@ -230,9 +279,10 @@ export function runBotTurn(empire: Empire, game: GameMeta, tick: number): BotRes
     }
   }
 
-  // 8. Send an idle fleet to attack the nearest enemy system
-  if (rng.next() < 0.4) {
-    const strikeFleet = fleets.find(f => f.state === 'idle' && f.shipIds.length >= 2 && !f.task);
+  // 8. Send an idle fleet to attack the nearest enemy system — but only if home
+  //    is secure and the fleet is strong enough to be worth committing.
+  if (!homeThreatened && rng.next() < 0.4) {
+    const strikeFleet = fleets.find(f => f.state === 'idle' && f.shipIds.length >= 3 && !f.task);
     if (strikeFleet) {
       const target = findAttackTarget({ ...empire, surveyedSystems: surveyed, controlledSystems: controlled }, game);
       if (target && target.systemId !== strikeFleet.systemId) {
@@ -265,6 +315,8 @@ export function runBotTurn(empire: Empire, game: GameMeta, tick: number): BotRes
   if (touched.stations)   patch.stations = stations;
   if (touched.ships)      patch.ships = ships;
   if (touched.fleets)     patch.fleets = fleets;
+  if (touched.orbitals)   patch.orbitalStructures = orbitals;
+  if (touched.investigations) patch.pendingInvestigations = pendingInv;
   if (touched.research)   { patch.researchQueue = researchQueue; patch.researchProgress = researchProgress; }
 
   return { patch, systemStateWrites: ssw, events };

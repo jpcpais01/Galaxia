@@ -152,21 +152,33 @@ export const ANOMALY_EFFECTS: Record<string, string> = {
   void_rift:          'Access to Void Gate: teleport between two systems',
 };
 
-export const TILE_CONFIG: Record<string, { label: string; color: string; hp: number; attack: number; defense: number; speed: number; icon: string }> = {
+export type DamageType = 'kinetic' | 'energy' | 'explosive';
+
+export const TILE_CONFIG: Record<string, {
+  label: string; color: string; hp: number; attack: number; defense: number; speed: number; icon: string;
+  damageType?: DamageType;   // for weapons: what kind of damage they deal
+  resistType?: DamageType;   // for defenses: which damage type they resist
+  requiresResearch?: string; // research node id needed before this tile can be placed
+}> = {
   cockpit:          { label: 'Cockpit',        color: '#88AAFF', hp: 40,  attack: 0,  defense: 0,  speed: 0,  icon: 'tile_cockpit' },
   crew_quarters:    { label: 'Crew Quarters',  color: '#6688AA', hp: 30,  attack: 0,  defense: 2,  speed: 0,  icon: 'tile_crew' },
   cargo_hold:       { label: 'Cargo',          color: '#446688', hp: 25,  attack: 0,  defense: 0,  speed: 0,  icon: 'tile_cargo' },
-  laser_cannon:     { label: 'Laser',          color: '#FF4444', hp: 20,  attack: 12, defense: 0,  speed: 0,  icon: 'tile_laser' },
-  missile_launcher: { label: 'Missiles',       color: '#FF8844', hp: 20,  attack: 18, defense: 0,  speed: 0,  icon: 'tile_missile' },
-  railgun:          { label: 'Railgun',        color: '#FFAA00', hp: 15,  attack: 25, defense: 0,  speed: 0,  icon: 'tile_railgun' },
-  shield_generator: { label: 'Shield',         color: '#44AAFF', hp: 30,  attack: 0,  defense: 20, speed: 0,  icon: 'tile_shield' },
-  armor_plate:      { label: 'Armor',          color: '#8888AA', hp: 50,  attack: 0,  defense: 10, speed: 0,  icon: 'tile_armor' },
+  laser_cannon:     { label: 'Laser',          color: '#FF4444', hp: 20,  attack: 12, defense: 0,  speed: 0,  icon: 'tile_laser',   damageType: 'energy' },
+  missile_launcher: { label: 'Missiles',       color: '#FF8844', hp: 20,  attack: 18, defense: 0,  speed: 0,  icon: 'tile_missile', damageType: 'explosive' },
+  railgun:          { label: 'Railgun',        color: '#FFAA00', hp: 15,  attack: 25, defense: 0,  speed: 0,  icon: 'tile_railgun', damageType: 'kinetic', requiresResearch: 'phys_2' },
+  shield_generator: { label: 'Shield',         color: '#44AAFF', hp: 30,  attack: 0,  defense: 20, speed: 0,  icon: 'tile_shield',  resistType: 'energy' },
+  armor_plate:      { label: 'Armor',          color: '#8888AA', hp: 50,  attack: 0,  defense: 10, speed: 0,  icon: 'tile_armor',   resistType: 'kinetic' },
   thruster:         { label: 'Thruster',       color: '#FF6600', hp: 25,  attack: 0,  defense: 0,  speed: 8,  icon: 'tile_thruster' },
-  hyperdrive:       { label: 'Hyperdrive',     color: '#AA44FF', hp: 20,  attack: 0,  defense: 0,  speed: 15, icon: 'tile_hyperdrive' },
-  sensor_array:     { label: 'Sensors',        color: '#44FFAA', hp: 20,  attack: 2,  defense: 0,  speed: 2,  icon: 'tile_sensor' },
-  ecm:              { label: 'ECM',            color: '#AAFF44', hp: 15,  attack: 0,  defense: 5,  speed: 0,  icon: 'tile_ecm' },
+  hyperdrive:       { label: 'Hyperdrive',     color: '#AA44FF', hp: 20,  attack: 0,  defense: 0,  speed: 15, icon: 'tile_hyperdrive', requiresResearch: 'phys_4' },
+  sensor_array:     { label: 'Sensors',        color: '#44FFAA', hp: 20,  attack: 2,  defense: 0,  speed: 2,  icon: 'tile_sensor',  damageType: 'kinetic' },
+  ecm:              { label: 'ECM',            color: '#AAFF44', hp: 15,  attack: 0,  defense: 5,  speed: 0,  icon: 'tile_ecm',     resistType: 'explosive', requiresResearch: 'ai_3' },
   repair_bay:       { label: 'Repair Bay',     color: '#44FF44', hp: 25,  attack: 0,  defense: 8,  speed: 0,  icon: 'tile_repair' },
   empty:            { label: 'Empty',          color: '#111122', hp: 0,   attack: 0,  defense: 0,  speed: 0,  icon: '' },
+};
+
+// Infrastructure / buildables gated behind research unlocks.
+export const INFRA_RESEARCH_REQUIRED: Partial<Record<InfraType, string>> = {
+  ai_datacenter: 'ai_1',
 };
 
 export const ORBITAL_CONFIG: Record<OrbitalStructureType, {

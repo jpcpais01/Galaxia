@@ -6,6 +6,7 @@ import {
   calcDesignStats, STARTER_DESIGNS,
 } from '@/lib/game/ship-designer';
 import { TILE_CONFIG } from '@/lib/game/constants';
+import { RESEARCH_BY_ID } from '@/lib/game/research-tree';
 import { PixelIcon } from './PixelIcon';
 import type { ShipTileType, ShipTile } from '@/types/game';
 
@@ -25,12 +26,22 @@ export default function ShipDesigner() {
   const [saved, setSaved]       = useState(false);
 
   const stats = calcDesignStats(grid);
+  const done = new Set(myEmpire?.completedResearch ?? []);
+  const tileLocked = (type: ShipTileType) => {
+    const req = TILE_CONFIG[type].requiresResearch;
+    return !!req && !done.has(req);
+  };
+  const lockReason = (type: ShipTileType) => {
+    const req = TILE_CONFIG[type].requiresResearch;
+    return req ? (RESEARCH_BY_ID[req]?.name ?? req) : '';
+  };
 
   const place = (x: number, y: number) => {
     const tile = grid.find(t => t.x === x && t.y === y);
     if (tile?.type === selected) {
       setGrid(clearTile(grid, x, y));
     } else {
+      if (tileLocked(selected)) return; // can't place un-researched tech
       setGrid(setTile(grid, x, y, selected));
     }
     setSaved(false);
@@ -145,21 +156,26 @@ export default function ShipDesigner() {
               <div className="flex flex-wrap gap-1">
                 {group.tiles.map(type => {
                   const cfg = TILE_CONFIG[type];
+                  const locked = tileLocked(type);
+                  const dmgInfo = cfg.damageType ? ` · ${cfg.damageType}` : cfg.resistType ? ` · resists ${cfg.resistType}` : '';
                   return (
                     <button
                       key={type}
-                      onClick={() => setSelected(type)}
-                      className="px-1.5 py-1 font-pixel text-[7px] border transition-all flex items-center gap-1"
+                      onClick={() => { if (!locked) setSelected(type); }}
+                      disabled={locked}
+                      className="px-1.5 py-1 font-pixel text-[7px] border transition-all flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed"
                       style={{
                         background: selected === type ? cfg.color + '33' : '#030308',
                         borderColor: selected === type ? cfg.color : '#1a1a2a',
                         color: cfg.color,
                         boxShadow: selected === type ? `0 0 6px ${cfg.color}44` : 'none',
                       }}
-                      title={`${cfg.label} — HP ${cfg.hp} · ATK ${cfg.attack} · DEF ${cfg.defense} · SPD ${cfg.speed}`}
+                      title={locked
+                        ? `🔒 Requires research: ${lockReason(type)}`
+                        : `${cfg.label} — HP ${cfg.hp} · ATK ${cfg.attack} · DEF ${cfg.defense} · SPD ${cfg.speed}${dmgInfo}`}
                     >
                       <PixelIcon id={cfg.icon} color={cfg.color} size={12} />
-                      <span>{cfg.label}</span>
+                      <span>{locked ? '🔒' : ''}{cfg.label}</span>
                     </button>
                   );
                 })}
@@ -178,6 +194,12 @@ export default function ShipDesigner() {
             <div className="font-mono text-[9px] text-[#3a5a6a]">
               HP {selectedCfg.hp} · ATK {selectedCfg.attack} · DEF {selectedCfg.defense} · SPD {selectedCfg.speed}
             </div>
+            {selectedCfg.damageType && (
+              <div className="font-mono text-[8px] text-[#ff8866]">Deals {selectedCfg.damageType} damage</div>
+            )}
+            {selectedCfg.resistType && (
+              <div className="font-mono text-[8px] text-[#44aaff]">Resists {selectedCfg.resistType} damage</div>
+            )}
           </div>
         </div>
 

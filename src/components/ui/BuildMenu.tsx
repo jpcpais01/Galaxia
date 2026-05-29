@@ -1,6 +1,7 @@
 'use client';
 import { useGameStore } from '@/store/game-store';
-import { INFRA_CONFIG } from '@/lib/game/constants';
+import { INFRA_CONFIG, INFRA_RESEARCH_REQUIRED } from '@/lib/game/constants';
+import { RESEARCH_BY_ID } from '@/lib/game/research-tree';
 import { canAfford, countUsedSlots } from '@/lib/game/economy';
 import { PixelIcon } from '@/components/ui/PixelIcon';
 import type { InfraType } from '@/types/game';
@@ -66,7 +67,9 @@ export default function BuildMenu() {
         {buildTypes.map(([type, cfg]) => {
           const affordable = canAfford(resources, cfg);
           const fits = usedSlots + cfg.slots <= planet.infraSlots;
-          const blocked = !affordable || !fits;
+          const reqResearch = INFRA_RESEARCH_REQUIRED[type];
+          const techLocked = !!reqResearch && !(myEmpire?.completedResearch ?? []).includes(reqResearch);
+          const blocked = !affordable || !fits || techLocked;
           const outputEntries = Object.entries(cfg.output) as [string, number][];
 
           return (
@@ -135,6 +138,9 @@ export default function BuildMenu() {
                   )}
                   {!fits && (
                     <span className="text-[#884444]">no slots</span>
+                  )}
+                  {techLocked && (
+                    <span className="text-[#aa6644]">🔒 {RESEARCH_BY_ID[reqResearch!]?.name ?? 'research'}</span>
                   )}
                 </div>
               </div>

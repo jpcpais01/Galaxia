@@ -3,7 +3,44 @@ import type {
   Station, OrbitalStructure, GameMeta,
 } from '@/types/game';
 import { SeededRandom } from '@/lib/noise';
-import { STATION_CONFIG, ORBITAL_CONFIG } from './constants';
+import { STATION_CONFIG, ORBITAL_CONFIG, TILE_CONFIG } from './constants';
+
+// ─── Damage typing (kinetic / energy / explosive) ──────────────────────────────
+type DmgVec = { kinetic: number; energy: number; explosive: number };
+const zeroVec = (): DmgVec => ({ kinetic: 0, energy: 0, explosive: 0 });
+
+// A ship's offensive output split by damage type, scaled to preserve the flat
+// ship.attack (which already includes civ/research multipliers).
+function shipOffenseByType(ship: Ship): DmgVec {
+  const base = zeroVec();
+  for (const t of ship.tiles) {
+    const c = TILE_CONFIG[t.type];
+    if (c && c.attack > 0 && c.damageType) base[c.damageType] += c.attack;
+  }
+  const total = base.kinetic + base.energy + base.explosive;
+  if (total <= 0) return { kinetic: ship.attack, energy: 0, explosive: 0 };
+  const k = ship.attack / total;
+  return { kinetic: base.kinetic * k, energy: base.energy * k, explosive: base.explosive * k };
+}
+
+// A ship's resistance by type (typed defenses + general defense applied to all).
+function shipResistByType(ship: Ship): DmgVec {
+  const base = zeroVec();
+  let general = 0;
+  for (const t of ship.tiles) {
+    const c = TILE_CONFIG[t.type];
+    if (c && c.defense > 0) { if (c.resistType) base[c.resistType] += c.defense; else general += c.defense; }
+  }
+  const total = base.kinetic + base.energy + base.explosive + general;
+  if (total <= 0) { const g = ship.defense / 3; return { kinetic: g, energy: g, explosive: g }; }
+  const k = ship.defense / total;
+  const g = general * k;
+  return {
+    kinetic:   base.kinetic   * k + g,
+    energy:    base.energy    * k + g,
+    explosive: base.explosive * k + g,
+  };
+}
 
 export interface CombatResult {
   report: CombatReport;
@@ -343,8 +380,7 @@ export function resolveAllCombat(empires: Empire[], game: GameMeta, tick: number
 
     // ── 1. Compute each empire's offensive output, choose a target ──────────
     const rng = new SeededRandom(tick * 7919 + strHash(sysId));
-    const incoming = new Map<string, number>();       // empireId → damage to take
-    const attackerTargets = new Map<string, string>(); // attackerId → targetId (for siege detection)
+    const incoming = new Map<string, DmgVec>();   // empireId → damage to take, by type
 
     for (const e of present) {
       const foes = enemiesOf.get(e.id)!;
@@ -354,12 +390,15 @@ export function resolveAllCombat(empires: Empire[], game: GameMeta, tick: number
       const myStations  = sysStations(e.id);
       const myPlatforms = sysPlatforms(e.id);
 
-      let atk =
-        myShips.reduce((a, s) => a + s.attack, 0) +
-        myStations.reduce((a, s) => a + STATION_CONFIG[s.type].attack, 0) +
-        myPlatforms.reduce((a, o) => a + ORBITAL_CONFIG[o.type].attack, 0);
-      if (atk <= 0) continue;
-      atk = Math.round(atk * (0.85 + rng.next() * 0.3));
+      // Offensive output by damage type (stations → kinetic, platforms → energy)
+      const off = zeroVec();
+      for (const s of myShips) { const o = shipOffenseByType(s); off.kinetic += o.kinetic; off.energy += o.energy; off.explosive += o.explosive; }
+      for (const s of myStations)  off.kinetic += STATION_CONFIG[s.type].attack;
+      for (const o of myPlatforms) off.energy  += ORBITAL_CONFIG[o.type].attack;
+      const offTotal = off.kinetic + off.energy + off.explosive;
+      if (offTotal <= 0) continue;
+      const varMul = 0.85 + rng.next() * 0.3;
+      off.kinetic *= varMul; off.energy *= varMul; off.explosive *= varMul;
 
       // Choose target: explicit attack-task target if it's a present foe, else strongest foe
       let target: Empire | undefined;
@@ -379,8 +418,9 @@ export function resolveAllCombat(empires: Empire[], game: GameMeta, tick: number
       }
       if (!target) continue;
 
-      incoming.set(target.id, (incoming.get(target.id) ?? 0) + atk);
-      attackerTargets.set(e.id, target.id);
+      const inc = incoming.get(target.id) ?? zeroVec();
+      inc.kinetic += off.kinetic; inc.energy += off.energy; inc.explosive += off.explosive;
+      incoming.set(target.id, inc);
 
       // Mark this empire's fleets in-system as fighting
       for (const f of w.fleets.get(e.id)!) {
@@ -390,20 +430,30 @@ export function resolveAllCombat(empires: Empire[], game: GameMeta, tick: number
 
     if (incoming.size === 0) continue;
 
-    // ── 2. Apply damage simultaneously ──────────────────────────────────────
+    // ── 2. Apply damage simultaneously (per-type mitigation) ────────────────
     const lossSummary: { empireId: string; shipsLost: number; stationsLost: number; structsLost: number }[] = [];
 
-    for (const [eid, rawDmg] of Array.from(incoming.entries())) {
+    for (const [eid, incVec] of Array.from(incoming.entries())) {
       const myShips     = sysFleetShips(eid);
       const myStations  = sysStations(eid);
       const myPlatforms = sysPlatforms(eid);
 
-      // Defense pool mitigates incoming damage
-      const defensePool =
-        myShips.reduce((a, s) => a + s.defense, 0) +
+      // Resistance pool by type (typed ship defenses + structure defense as general)
+      const resist = zeroVec();
+      for (const s of myShips) { const r = shipResistByType(s); resist.kinetic += r.kinetic; resist.energy += r.energy; resist.explosive += r.explosive; }
+      const structDef =
         myStations.reduce((a, s) => a + STATION_CONFIG[s.type].defense, 0) +
         myPlatforms.reduce((a, o) => a + ORBITAL_CONFIG[o.type].defense, 0);
-      let dmg = Math.max(Math.ceil(rawDmg * 0.3), rawDmg - Math.floor(defensePool / 2));
+      resist.kinetic += structDef; resist.energy += structDef; resist.explosive += structDef;
+
+      // Each damage type is mitigated by its own resistance; shields counter
+      // energy, armour counters kinetic, ECM counters explosive.
+      let dmg = 0;
+      (['kinetic', 'energy', 'explosive'] as const).forEach(t => {
+        const d = incVec[t];
+        if (d > 0) dmg += Math.max(Math.ceil(d * 0.25), d - Math.floor(resist[t] / 2));
+      });
+      dmg = Math.round(dmg);
 
       const aRng = new SeededRandom(tick * 104729 + strHash(sysId + eid));
 
