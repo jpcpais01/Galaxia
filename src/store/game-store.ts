@@ -14,7 +14,7 @@ import type {
 import { generateGalaxy, findHomeSystem, findPath, systemDistance } from '@/lib/game/galaxy-generator';
 import { createBotEmpire, runBotTurn } from '@/lib/game/bot-ai';
 import { applyTick, canAfford, deductCosts, countUsedSlots } from '@/lib/game/economy';
-import { resolveAssembly, checkVictory, ANOMALY_GRANTS } from '@/lib/game/world';
+import { resolveAssembly, checkVictory, resolveContacts, ANOMALY_GRANTS } from '@/lib/game/world';
 import { ANOMALY_EFFECTS } from '@/lib/game/constants';
 import { INFRA_CONFIG, STATION_CONFIG, GROUND_OP_CONFIG, ORBITAL_CONFIG, INFRA_RESEARCH_REQUIRED, EMPIRE_COLORS, STARTING_RESOURCES, GAME_TICK_MS, SYSTEM_COUNT } from '@/lib/game/constants';
 import { STARTER_DESIGNS, instantiateShip } from '@/lib/game/ship-designer';
@@ -1238,6 +1238,15 @@ export const useGameStore = create<GameStore>((set, get) => ({
       });
     }
     eventsToEmit.push(...deltas.events);
+
+    // ─── First contact: reveal empires once they can see each other ───────────
+    const contact = resolveContacts(Object.values(empiresAfterTick), newTick);
+    for (const [eid, list] of Object.entries(contact.updates)) {
+      const e = empiresAfterTick[eid];
+      if (e) e.contactedEmpires = list;
+      mergeEmpire(eid, { contactedEmpires: list });
+    }
+    eventsToEmit.push(...contact.events);
 
     // ─── Galactic Assembly: bots vote (self-interest), then close & apply ─────
     const assemblyState = (currentGame.assembly ?? []).map(v => ({ ...v, votes: { ...v.votes } }));

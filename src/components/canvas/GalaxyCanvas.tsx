@@ -197,10 +197,17 @@ export default function GalaxyCanvas() {
     const myId     = myEmpire?.id;
     const flowOff  = (t / 72) % 18;
 
+    // Fog of war: a system is "known" only if we control or have surveyed it.
+    // Ownership / stations / lanes / fleets are hidden in unknown systems.
+    const survSet = new Set(myEmpire?.surveyedSystems ?? []);
+    const ctrlSet = new Set(myEmpire?.controlledSystems ?? []);
+    const knownSys = (id: string) => survSet.has(id) || ctrlSet.has(id);
+
     /* ── 5. Territory soft glow behind each owned system ──────── */
     for (const sys of systems) {
       const st = systemStates[sys.id];
       if (!st?.ownerId) continue;
+      if (!knownSys(sys.id)) continue;          // hide undiscovered territory
       const owner = empires.find(e => e.id === st.ownerId);
       if (!owner) continue;
       const { sx, sy } = w2s(sys.x, sys.y, CW, CH);
@@ -230,9 +237,8 @@ export default function GalaxyCanvas() {
 
         const aOwn  = systemStates[sys.id]?.ownerId;
         const bOwn  = systemStates[cid]?.ownerId;
-        const aSurv = myEmpire?.surveyedSystems.includes(sys.id) ?? false;
-        const bSurv = myEmpire?.surveyedSystems.includes(cid)    ?? false;
-        const vis   = (aSurv || !!aOwn) && (bSurv || !!bOwn);
+        // A lane is only visible if BOTH endpoints are systems we know.
+        const vis   = knownSys(sys.id) && knownSys(cid);
         const mine  = aOwn === myId && bOwn === myId;
         const allied = !!aOwn && aOwn === bOwn && !mine;
 
@@ -281,8 +287,10 @@ export default function GalaxyCanvas() {
       if (sx < -60 || sx > CW + 60 || sy < -60 || sy > CH + 60) continue;
 
       const st    = systemStates[sys.id];
-      const owner = st?.ownerId ? empires.find(e => e.id === st.ownerId) : null;
-      const surv  = myEmpire?.surveyedSystems.includes(sys.id) ?? false;
+      const known = knownSys(sys.id);
+      // Owner info is only revealed for systems we know
+      const owner = (st?.ownerId && known) ? (empires.find(e => e.id === st.ownerId) ?? null) : null;
+      const surv  = survSet.has(sys.id);
       const isSel = ui.selectedSystemId === sys.id;
       const isHov = ui.hoverSystemId   === sys.id;
 
@@ -293,8 +301,8 @@ export default function GalaxyCanvas() {
       const px      = Math.round(sx);
       const py      = Math.round(sy);
 
-      // Undiscovered systems render at 10% opacity — same visuals, just faded
-      const AS = (!surv && !owner) ? 0.1 : 1.0;
+      // Uncharted systems render dim — you see a star, but no ownership/name
+      const AS = known ? 1.0 : 0.1;
 
       /* Outer star glow (soft radial) */
       const glowR = baseR * 4.2;
@@ -476,7 +484,7 @@ export default function GalaxyCanvas() {
       /* ── System label ── */
       if (Z > 0.44 || isSel || isHov) {
         const fs    = Math.max(8, Math.min(11, 9 * Z));
-        const label = surv || owner ? sys.name : '???';
+        const label = known ? sys.name : '???';
         ctx.font      = `${fs}px 'Share Tech Mono'`;
         ctx.textAlign = 'center';
         // Drop shadow
@@ -484,7 +492,7 @@ export default function GalaxyCanvas() {
         ctx.globalAlpha = 0.65 * AS;
         ctx.fillText(label, sx + 1, sy + baseR + 16);
         // Main label
-        ctx.fillStyle   = isSel ? '#00ffff' : owner ? owner.color : surv ? '#7a9ab8' : '#4a6a7a';
+        ctx.fillStyle   = isSel ? '#00ffff' : owner ? owner.color : known ? '#7a9ab8' : '#4a6a7a';
         ctx.globalAlpha = (isSel ? 1 : 0.88) * AS;
         ctx.fillText(label, sx, sy + baseR + 15);
         ctx.globalAlpha = AS;
@@ -505,7 +513,7 @@ export default function GalaxyCanvas() {
       }
 
       /* ── Station pixel icon (small satellite shape) ── */
-      if (st?.stationId && Z > 0.48) {
+      if (st?.stationId && known && Z > 0.48) {
         const ix  = px + baseR + 6;
         const iy  = py - baseR - 5;
         const col = owner?.color ?? '#88aaff';
@@ -527,8 +535,11 @@ export default function GalaxyCanvas() {
 
     /* ── 7.5 In-transit fleets (moving between systems along hyperlanes) ── */
     for (const empire of empires) {
+      const isMineFleet = empire.id === myId;
       for (const fleet of (empire.fleets ?? [])) {
         if (fleet.state !== 'in_transit' || !fleet.transitToSystemId) continue;
+        // Only show our own fleets, or enemy fleets travelling a lane we know
+        if (!isMineFleet && !knownSys(fleet.transitFromSystemId ?? fleet.systemId) && !knownSys(fleet.transitToSystemId)) continue;
         const from = systems.find(s => s.id === (fleet.transitFromSystemId ?? fleet.systemId));
         const to   = systems.find(s => s.id === fleet.transitToSystemId);
         if (!from || !to) continue;

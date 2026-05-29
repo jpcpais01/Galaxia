@@ -124,6 +124,60 @@ export function resolveAssembly(empires: Empire[], game: GameMeta, tick: number)
 }
 
 // ════════════════════════════════════════════════════════════════════════════
+//  FIRST CONTACT — empires stay hidden until you can see each other's assets
+// ════════════════════════════════════════════════════════════════════════════
+
+export interface ContactResult {
+  updates: Record<string, string[]>; // empireId → full new contactedEmpires list
+  events: GameEvent[];
+}
+
+// An empire "sees" a system it controls, has surveyed, or has a fleet in. Two
+// empires make (mutual) first contact when one can see any of the other's
+// territory, stations, or fleets.
+export function resolveContacts(empires: Empire[], tick: number): ContactResult {
+  const vision = new Map<string, Set<string>>();
+  for (const e of empires) {
+    const s = new Set<string>(e.controlledSystems);
+    for (const id of e.surveyedSystems) s.add(id);
+    for (const f of (e.fleets ?? [])) if (f.state !== 'in_transit') s.add(f.systemId);
+    vision.set(e.id, s);
+  }
+
+  const contacts = new Map<string, Set<string>>();
+  for (const e of empires) contacts.set(e.id, new Set(e.contactedEmpires ?? []));
+
+  const changed = new Set<string>();
+  const events: GameEvent[] = [];
+
+  for (const e of empires) {
+    const ev = vision.get(e.id)!;
+    for (const f of empires) {
+      if (f.id === e.id || contacts.get(e.id)!.has(f.id)) continue;
+      const seen =
+        f.controlledSystems.some(s => ev.has(s)) ||
+        f.stations.some(s => ev.has(s.systemId)) ||
+        (f.fleets ?? []).some(fl => fl.state !== 'in_transit' && ev.has(fl.systemId));
+      if (!seen) continue;
+      contacts.get(e.id)!.add(f.id);
+      contacts.get(f.id)!.add(e.id); // contact is mutual
+      changed.add(e.id);
+      changed.add(f.id);
+      events.push({
+        id: `evt_${tick}_contact_${e.id}_${f.id}`,
+        type: 'diplomacy',
+        message: `${e.username} has made first contact with ${f.username}`,
+        tick, empireId: e.id, targetEmpireId: f.id,
+      });
+    }
+  }
+
+  const updates: Record<string, string[]> = {};
+  for (const id of Array.from(changed)) updates[id] = Array.from(contacts.get(id)!);
+  return { updates, events };
+}
+
+// ════════════════════════════════════════════════════════════════════════════
 //  VICTORY
 // ════════════════════════════════════════════════════════════════════════════
 

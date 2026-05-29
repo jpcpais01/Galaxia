@@ -320,6 +320,7 @@ export interface Empire {
   pendingColonizations: PendingColonization[];
   pendingInvestigations?: PendingInvestigation[];
   resolvedAnomalies?: string[];   // planet ids whose anomaly this empire has claimed
+  contactedEmpires?: string[];    // empire ids we have made first contact with
   eliminated?: boolean;           // lost all systems/stations/ships
   civilization?: Civilization;
   homePlanetId?: string;

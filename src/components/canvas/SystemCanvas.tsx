@@ -218,10 +218,19 @@ export default function SystemCanvas() {
       }
     }
 
+    // Fog of war: enemy assets in this system are only shown if we have vision
+    // (we control it, surveyed it, or have a fleet present).
+    const sysVisible = !!myEmpire && (
+      myEmpire.controlledSystems.includes(system.id) ||
+      myEmpire.surveyedSystems.includes(system.id) ||
+      (myEmpire.fleets ?? []).some(f => f.systemId === system.id && f.state !== 'in_transit')
+    );
+
     // Stations
     const stationHits: typeof stationHitsRef.current = [];
     for (const empire of empires) {
       const isMine = empire.id === myEmpire?.id;
+      if (!isMine && !sysVisible) continue;   // hide undiscovered empires' stations
       for (let si = 0; si < empire.stations.length; si++) {
         const station = empire.stations[si];
         if (station.systemId !== system.id) continue;
@@ -287,6 +296,7 @@ export default function SystemCanvas() {
     // ── Build a quick index of all in-system combat assets (for beam FX) ──
     const assetPos: { empireId: string; x: number; y: number }[] = [];
     for (const empire of empires) {
+      if (empire.id !== myEmpire?.id && !sysVisible) continue;
       for (const fleet of (empire.fleets ?? [])) {
         if (fleet.systemId === system.id && fleet.state !== 'in_transit') {
           assetPos.push({ empireId: empire.id, x: fleet.posX * W, y: fleet.posY * H });
@@ -298,6 +308,8 @@ export default function SystemCanvas() {
     // Fleets
     const fleetHits: typeof fleetHitsRef.current = [];
     for (const empire of empires) {
+      const isMineEmpire = empire.id === myEmpire?.id;
+      if (!isMineEmpire && !sysVisible) continue;   // hide undiscovered empires' fleets
       for (const fleet of (empire.fleets ?? [])) {
         if (fleet.systemId !== system.id) continue;
         if (fleet.state === 'in_transit') continue;

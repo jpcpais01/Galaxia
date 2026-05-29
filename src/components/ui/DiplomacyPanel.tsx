@@ -5,7 +5,9 @@ export default function DiplomacyPanel() {
   const { empires, myEmpire, setPanel, proposeDiplomacy, acceptDiplomacy, declineDiplomacy } = useGameStore();
   if (!myEmpire) return null;
 
-  const others = empires.filter(e => e.id !== myEmpire.id);
+  const contacted = new Set(myEmpire.contactedEmpires ?? []);
+  const others = empires.filter(e => e.id !== myEmpire.id && contacted.has(e.id));
+  const undiscovered = empires.filter(e => e.id !== myEmpire.id && !contacted.has(e.id)).length;
 
   const getRelation = (empireId: string) =>
     myEmpire.diplomacy.find(d => d.empireId === empireId);
@@ -24,8 +26,10 @@ export default function DiplomacyPanel() {
 
       <div className="flex-1 scrollable p-3 flex flex-col gap-2">
         {others.length === 0 && (
-          <div className="font-mono text-[11px] text-[#2a3a4a] text-center py-8">
-            No other empires in the galaxy yet.
+          <div className="font-mono text-[10px] text-[#2a3a4a] text-center py-8">
+            No civilizations contacted yet.
+            <br />
+            <span className="text-[#1a2a3a]">Explore and survey nearby systems to discover them.</span>
           </div>
         )}
 
@@ -93,6 +97,12 @@ export default function DiplomacyPanel() {
             </div>
           );
         })}
+
+        {undiscovered > 0 && (
+          <div className="font-mono text-[9px] text-[#3a4a5a] text-center py-2 border-t border-[#0f0f28] mt-1">
+            ◌ {undiscovered} undiscovered civilization{undiscovered !== 1 ? 's' : ''} out there
+          </div>
+        )}
       </div>
     </div>
   );
