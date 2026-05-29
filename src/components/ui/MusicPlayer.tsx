@@ -2,11 +2,11 @@
 import { useRef, useState, useEffect, useCallback } from 'react';
 
 const TRACKS = [
-  { title: 'Stellar Drift',    file: '/music/01_stellar_drift.ogg',    mood: 'main theme' },
-  { title: 'Nebula Run',       file: '/music/02_nebula_run.ogg',       mood: 'exploration' },
-  { title: 'Ion Storm',        file: '/music/03_ion_storm.ogg',        mood: 'combat' },
-  { title: 'Frozen Expanse',   file: '/music/04_frozen_expanse.ogg',   mood: 'deep space' },
-  { title: 'Victory Protocol', file: '/music/05_victory_protocol.ogg', mood: 'triumph' },
+  { title: 'Orbit Lullaby',    file: '/music/orbit-lullaby.mp3' },
+  { title: 'Orbit Cipher',     file: '/music/orbit-cipher.mp3' },
+  { title: 'Starfall Synapse', file: '/music/starfall-synapse.mp3' },
+  { title: 'Ionized Dawn',     file: '/music/ionized-dawn.mp3' },
+  { title: 'Starlight Solder', file: '/music/starlight-solder.mp3' },
 ];
 
 export default function MusicPlayer() {
@@ -74,8 +74,7 @@ export default function MusicPlayer() {
                   color:       i === idx ? '#9ab8ff' : '#5a7a8a',
                 }}
               >
-                <span>{i === idx && playing ? '►' : ''} {t.title}</span>
-                <span className="text-[#3a4a5a]">{t.mood}</span>
+                <span>{i === idx && playing ? '► ' : ''}{t.title}</span>
               </button>
             ))}
           </div>

@@ -40,3 +40,6 @@ tsconfig.tsbuildinfo
 /public/worker-*.js
 /public/swe-worker-*.js
 /public/fallback-*.js
+
+# Source soundtrack files (copied into public/music)
+/music/
