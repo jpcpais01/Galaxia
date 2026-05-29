@@ -926,11 +926,15 @@ export const useGameStore = create<GameStore>((set, get) => ({
   setFleetTask: async (fleetId, task) => {
     const { currentGame, myEmpire } = get();
     if (!currentGame || !myEmpire) return;
-    const updated = (myEmpire.fleets ?? []).map(f =>
-      f.id === fleetId
-        ? (task === null ? { ...f, task: undefined } : { ...f, task })
-        : f
-    );
+    const updated = (myEmpire.fleets ?? []).map(f => {
+      if (f.id !== fleetId) return f;
+      if (task === null) {
+        // Stand down — strip the task key entirely (Firestore rejects `undefined`)
+        const { task: _drop, ...rest } = f;
+        return rest;
+      }
+      return { ...f, task };
+    });
     await updateDoc(doc(db, 'games', currentGame.id, 'empires', myEmpire.id), {
       fleets: updated,
     });

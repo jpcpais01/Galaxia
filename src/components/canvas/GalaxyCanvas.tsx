@@ -77,8 +77,9 @@ export default function GalaxyCanvas() {
   const bgRef     = useRef<BgStar[][]>([[], [], []]);
   const nebRef    = useRef<Nebula[]>([]);
 
-  const { currentGame, empires, ui, selectSystem, setCamera, setHoverSystem, moveFleet } = useGameStore();
+  const { currentGame, empires, ui, selectSystem, setCamera, setHoverSystem, moveFleet, setView } = useGameStore();
   const { user } = useAuthStore();
+  const lastClickRef = useRef<{ id: string; t: number } | null>(null);
 
   /* World ↔ screen conversions */
   const w2s = useCallback((wx: number, wy: number, W: number, H: number) => ({
@@ -668,7 +669,16 @@ export default function GalaxyCanvas() {
         if (selFleet && sys.id !== selFleet.systemId) {
           moveFleet(selFleet.id, sys.id);
         } else {
+          // Double-click (same system within 400ms) opens the system view
+          const now = Date.now();
+          const last = lastClickRef.current;
           selectSystem(sys.id);
+          if (last && last.id === sys.id && now - last.t < 400) {
+            setView('system');
+            lastClickRef.current = null;
+          } else {
+            lastClickRef.current = { id: sys.id, t: now };
+          }
         }
         return;
       }

@@ -226,17 +226,19 @@ export default function SystemCanvas() {
       (myEmpire.fleets ?? []).some(f => f.systemId === system.id && f.state !== 'in_transit')
     );
 
-    // Stations
+    // Stations — orbit radius is a fraction of the viewport so they're always
+    // on-screen, and indexed within THIS system (not the empire's whole fleet).
+    const maxR = Math.min(cx, cy);
     const stationHits: typeof stationHitsRef.current = [];
     for (const empire of empires) {
       const isMine = empire.id === myEmpire?.id;
       if (!isMine && !sysVisible) continue;   // hide undiscovered empires' stations
-      for (let si = 0; si < empire.stations.length; si++) {
-        const station = empire.stations[si];
-        if (station.systemId !== system.id) continue;
+      const here = empire.stations.filter(s => s.systemId === system.id);
+      for (let li = 0; li < here.length; li++) {
+        const station = here[li];
         const cfg = STATION_CONFIG[station.type];
-        const angle = ts * 0.0002 + empire.id.charCodeAt(0) * 0.5 + si * 1.3;
-        const stR = 70 + si * 22;
+        const angle = ts * 0.0002 + empire.id.charCodeAt(0) * 0.5 + li * 1.3;
+        const stR = Math.min(maxR * 0.7, maxR * 0.22 + li * 18);
         const sx2 = cx + Math.cos(angle) * stR;
         const sy2 = cy + Math.sin(angle) * stR;
 
