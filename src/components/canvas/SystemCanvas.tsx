@@ -533,7 +533,7 @@ export default function SystemCanvas() {
       />
       <button
         className="absolute top-3 left-3 btn-gray text-[9px] px-2 py-1"
-        onClick={() => { setView('galaxy'); selectPlanet(null); selectFleet(null); }}
+        onClick={() => { setView('galaxy'); selectPlanet(null); }}
       >
         ← GALAXY
       </button>

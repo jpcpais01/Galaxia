@@ -11,11 +11,12 @@ import type {
   PendingSurvey, PendingColonization, Civilization,
   Fleet, FleetTask, OrbitalStructureType, OrbitalStructure, Ship,
 } from '@/types/game';
-import { generateGalaxy, findHomeSystem } from '@/lib/game/galaxy-generator';
-import { createBotEmpire, decideBotAction } from '@/lib/game/bot-ai';
+import { generateGalaxy, findHomeSystem, findPath, systemDistance } from '@/lib/game/galaxy-generator';
+import { createBotEmpire, runBotTurn } from '@/lib/game/bot-ai';
 import { applyTick, canAfford, deductCosts, countUsedSlots } from '@/lib/game/economy';
+import { resolveAnomalies, resolveAssembly, checkVictory } from '@/lib/game/world';
 import { INFRA_CONFIG, STATION_CONFIG, GROUND_OP_CONFIG, ORBITAL_CONFIG, EMPIRE_COLORS, STARTING_RESOURCES, GAME_TICK_MS, SYSTEM_COUNT } from '@/lib/game/constants';
-import { STARTER_DESIGNS } from '@/lib/game/ship-designer';
+import { STARTER_DESIGNS, instantiateShip } from '@/lib/game/ship-designer';
 import { resolveAllCombat } from '@/lib/game/combat';
 
 interface GameStore {
@@ -60,6 +61,7 @@ interface GameStore {
   saveShipDesign: (design: Empire['shipDesigns'][0]) => Promise<void>;
   proposeDiplomacy: (targetEmpireId: string, status: string) => Promise<void>;
   acceptDiplomacy:  (targetEmpireId: string) => Promise<void>;
+  declineDiplomacy: (fromEmpireId: string) => Promise<void>;
   proposeAssemblyVote: (title: string, description: string, effect: string) => Promise<void>;
   castAssemblyVote: (voteId: string, vote: boolean) => Promise<void>;
 
@@ -154,6 +156,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       createdAt: Date.now(), maxPlayers, botCount,
       currentPlayers: 1, tick: 0, lastTickTime: Date.now(),
       seed, starCount, galaxy, systemStates, assembly: [],
+      maxTick: 2000,
     };
 
     const { galaxy: _g, ...gameDoc } = game;
@@ -591,40 +594,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     );
     if (!hasGroundShipyard && !hasOrbitalShipyard) return;
 
-    // Apply civilization bonuses to ship stats at build time
-    const civ = myEmpire.civilization;
-    let hpMult    = 1;
-    let speedMult = 1;
-    let atkMult   = 1;
-    let defMult   = 1;
-    if (civ) {
-      if (civ.traits.includes('resilient'))      hpMult    *= 1.20;
-      if (civ.traits.includes('fragile'))        hpMult    *= 0.80;
-      if (civ.traits.includes('swift'))          speedMult *= 1.20;
-      if (civ.traits.includes('sluggish'))       speedMult *= 0.80;
-      if (civ.culturalFocus === 'militaristic')  { hpMult *= 1.15; atkMult *= 1.15; }
-      if (civ.culturalFocus === 'isolationist')  defMult   *= 1.35;
-      if (civ.government   === 'military_junta') atkMult   *= 1.25;
-      if (civ.origin       === 'warrior_clans')  atkMult   *= 1.25;
-      if (civ.speciesType  === 'fungal')         speedMult *= 0.85;
-      if (civ.speciesType  === 'crystalline')    hpMult    *= 0.85; // -15% ship HP
-    }
-    const baseHp = design.tiles.reduce((s, t) => s + t.hp, 0);
-    const ship = {
-      id: `ship_${Date.now()}`,
-      designId: design.id,
-      designName: design.name,
-      name: `${design.name} ${myEmpire.ships.length + 1}`,
-      ownerId: myEmpire.id,
-      systemId,
-      hp:      Math.max(1, Math.round(baseHp           * hpMult)),
-      maxHp:   Math.max(1, Math.round(baseHp           * hpMult)),
-      attack:  Math.round(design.attack  * atkMult),
-      defense: Math.round(design.defense * defMult),
-      speed:   Math.max(1, Math.round(design.speed     * speedMult)),
-      tiles: design.tiles.map(t => ({ ...t })),
-      buildCompletedTick: currentGame.tick + design.buildTicks,
-    };
+    const ship = instantiateShip(myEmpire, design, systemId, currentGame.tick, myEmpire.ships.length + 1);
 
     const newResources = deductCosts(myEmpire.resources, design);
     await updateDoc(doc(db, 'games', currentGame.id, 'empires', myEmpire.id), {
@@ -647,14 +617,36 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const { currentGame, myEmpire } = get();
     if (!currentGame || !myEmpire) return;
 
+    const targetEmpire = get().empires.find(e => e.id === targetEmpireId);
+    if (!targetEmpire) return;
+
+    // Declaring war is unilateral — no consent required (sets both sides at_war).
+    if (status === 'at_war') {
+      const mine = [...(myEmpire.diplomacy ?? [])];
+      const mineRel = mine.find(d => d.empireId === targetEmpireId);
+      if (mineRel) { mineRel.status = 'at_war'; mineRel.proposalPending = undefined; }
+      else mine.push({ empireId: targetEmpireId, status: 'at_war', tradeDeals: [] });
+
+      const theirs = [...(targetEmpire.diplomacy ?? [])];
+      const theirRel = theirs.find(d => d.empireId === myEmpire.id);
+      if (theirRel) { theirRel.status = 'at_war'; theirRel.proposalPending = undefined; }
+      else theirs.push({ empireId: myEmpire.id, status: 'at_war', tradeDeals: [] });
+
+      await updateDoc(doc(db, 'games', currentGame.id, 'empires', myEmpire.id), { diplomacy: mine });
+      await updateDoc(doc(db, 'games', currentGame.id, 'empires', targetEmpireId), { diplomacy: theirs });
+      await addDoc(collection(db, 'games', currentGame.id, 'events'), {
+        id: `evt_${Date.now()}_war`, type: 'diplomacy',
+        message: `${myEmpire.username} declared WAR on ${targetEmpire.username}`,
+        tick: currentGame.tick, empireId: myEmpire.id, targetEmpireId,
+      });
+      return;
+    }
+
     const proposal = {
       type: status as import('@/types/game').DiplomacyStatus | 'trade',
       fromEmpireId: myEmpire.id,
       expiresAtTick: currentGame.tick + 10,
     };
-
-    const targetEmpire = get().empires.find(e => e.id === targetEmpireId);
-    if (!targetEmpire) return;
 
     const updatedDiplomacy = [...(targetEmpire.diplomacy ?? [])];
     const rel = updatedDiplomacy.find(d => d.empireId === myEmpire.id);
@@ -667,6 +659,14 @@ export const useGameStore = create<GameStore>((set, get) => ({
     await updateDoc(doc(db, 'games', currentGame.id, 'empires', targetEmpireId), {
       diplomacy: updatedDiplomacy,
     });
+  },
+
+  declineDiplomacy: async (fromEmpireId) => {
+    const { currentGame, myEmpire } = get();
+    if (!currentGame || !myEmpire) return;
+    const updated = (myEmpire.diplomacy ?? []).map(d =>
+      d.empireId === fromEmpireId ? { ...d, proposalPending: undefined } : d);
+    await updateDoc(doc(db, 'games', currentGame.id, 'empires', myEmpire.id), { diplomacy: updated });
   },
 
   acceptDiplomacy: async (fromEmpireId) => {
@@ -809,13 +809,20 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const fleet = (myEmpire.fleets ?? []).find(f => f.id === fleetId);
     if (!fleet) return;
     if (fleet.systemId === targetSystemId) return;
+
+    // Path along hyperlanes through systems we know about
+    const allowed = new Set([...(myEmpire.surveyedSystems ?? []), ...(myEmpire.controlledSystems ?? [])]);
+    const path = findPath(currentGame.galaxy, fleet.systemId, targetSystemId, allowed) ?? [targetSystemId];
+    if (path.length === 0) return;
+
     const updated = (myEmpire.fleets ?? []).map(f =>
       f.id === fleetId
         ? {
             ...f,
             state: 'in_transit' as const,
             transitFromSystemId: f.systemId,
-            transitToSystemId: targetSystemId,
+            transitToSystemId: path[0],
+            transitPath: path,
             transitProgress: 0,
             task: { type: 'move_system' as const, targetSystemId },
           }
@@ -908,60 +915,109 @@ export const useGameStore = create<GameStore>((set, get) => ({
     if (!tickAdvanced) return;
 
     const newTick = actualNewTick;
+    const galaxy = currentGame.galaxy;
 
-    // Snapshot of empires after applyTick for cross-empire combat processing
+    // Snapshot of empires after this tick (used by combat / assembly / victory)
     const empiresAfterTick: Record<string, Empire> = {};
+    const eventsToEmit: GameEvent[] = [];
 
     for (const empire of empires) {
       const updates = applyTick(empire, newTick);
 
-      // Process fleet movement & transit
-      const updatedFleets = (empire.fleets ?? []).map(f => processFleetMovement(f, empire.ships));
-      const updatedShips = applyShipSystemFromTransitedFleets(empire.ships, updatedFleets);
+      // ── Fleet movement & transit (distance-based, multi-hop) ──────────────
+      const movedFleets  = (empire.fleets ?? []).map(f => processFleetMovement(f, empire.ships, galaxy));
+      let   updatedShips = applyShipSystemFromTransitedFleets(empire.ships, movedFleets);
+      // ── Ship repair / regen (non-fighting ships in friendly space) ────────
+      updatedShips = repairShips({ ...empire, ...updates } as Empire, updatedShips, movedFleets, newTick);
 
-      const allUpdates = {
+      // ── Anomalies: investigate any in newly-surveyed systems ──────────────
+      let resources = (updates.resources ?? empire.resources) as Resources;
+      const oldSurveyed   = new Set(empire.surveyedSystems ?? []);
+      const newSurveyed   = (updates.surveyedSystems ?? empire.surveyedSystems) as string[];
+      const newlySurveyed = newSurveyed.filter(s => !oldSurveyed.has(s));
+      let resolvedAnomalies = empire.resolvedAnomalies;
+      if (newlySurveyed.length > 0) {
+        const anom = resolveAnomalies(empire, currentGame, newlySurveyed, newTick);
+        if (anom.resolvedPlanetIds.length > 0) {
+          resources = { ...resources };
+          for (const [k, v] of Object.entries(anom.grants) as [keyof Resources, number][]) {
+            resources[k] = (resources[k] ?? 0) + v;
+          }
+          resolvedAnomalies = Array.from(new Set([...(empire.resolvedAnomalies ?? []), ...anom.resolvedPlanetIds]));
+          eventsToEmit.push(...anom.events);
+        }
+      }
+
+      // ── Diplomacy: expire stale proposals ─────────────────────────────────
+      let diplomacy = empire.diplomacy;
+      if ((empire.diplomacy ?? []).some(d => d.proposalPending && d.proposalPending.expiresAtTick <= newTick)) {
+        diplomacy = (empire.diplomacy ?? []).map(d =>
+          d.proposalPending && d.proposalPending.expiresAtTick <= newTick ? { ...d, proposalPending: undefined } : d);
+      }
+
+      // ── Claim systems for stations that finished building ─────────────────
+      let controlled = [...empire.controlledSystems];
+      const newlyBuilt = empire.stations.filter(s => s.buildCompletedTick <= newTick && !controlled.includes(s.systemId));
+      if (newlyBuilt.length > 0) {
+        controlled = Array.from(new Set([...controlled, ...newlyBuilt.map(s => s.systemId)]));
+      }
+
+      // ── Assemble the merged empire state ──────────────────────────────────
+      let merged: Empire = {
+        ...empire,
         ...updates,
-        fleets: updatedFleets,
+        resources,
+        fleets: movedFleets,
         ships: updatedShips,
-      };
+        controlledSystems: controlled,
+        diplomacy,
+        ...(resolvedAnomalies ? { resolvedAnomalies } : {}),
+      } as Empire;
 
-      empiresAfterTick[empire.id] = { ...empire, ...allUpdates } as Empire;
-
-      await updateDoc(doc(db, 'games', currentGame.id, 'empires', empire.id), allUpdates);
-
-      // Push newly completed surveys to game-level systemStates
-      const oldSurveyed = empire.surveyedSystems ?? [];
-      const newSurveyed = (updates as any).surveyedSystems ?? oldSurveyed;
-      for (const sysId of newSurveyed) {
-        if (!oldSurveyed.includes(sysId)) {
-          await updateDoc(doc(db, 'games', currentGame.id), {
-            [`systemStates.${sysId}.surveyedBy`]: arrayUnion(empire.id),
-          });
-        }
-      }
-
-      // Claim systems for stations whose build timer has completed (and haven't been claimed yet)
-      const newlyBuiltStations = empire.stations.filter(
-        s => s.buildCompletedTick <= newTick && !empire.controlledSystems.includes(s.systemId)
-      );
-      if (newlyBuiltStations.length > 0) {
-        const newControlled = Array.from(new Set([
-          ...empire.controlledSystems,
-          ...newlyBuiltStations.map(s => s.systemId),
-        ]));
-        await updateDoc(doc(db, 'games', currentGame.id, 'empires', empire.id), {
-          controlledSystems: newControlled,
-        });
-        for (const stn of newlyBuiltStations) {
-          await updateDoc(doc(db, 'games', currentGame.id), {
-            [`systemStates.${stn.systemId}.ownerId`]: empire.id,
-          });
-        }
-      }
-
+      // ── Bot turn (produces a patch we merge before writing) ───────────────
+      const botSSW: { path: string; value: unknown }[] = [];
       if (empire.isBot && newTick % 2 === 0) {
-        const action = decideBotAction({ ...empire, ...updates } as Empire, currentGame, newTick);
-        await executeBotAction(action, { ...empire, ...updates } as Empire, currentGame, newTick);
+        const res = runBotTurn(merged, currentGame, newTick);
+        merged = { ...merged, ...res.patch } as Empire;
+        eventsToEmit.push(...res.events);
+        botSSW.push(...res.systemStateWrites);
+      }
+
+      empiresAfterTick[empire.id] = merged;
+
+      // ── Single empire write ───────────────────────────────────────────────
+      await updateDoc(doc(db, 'games', currentGame.id, 'empires', empire.id), {
+        resources:            merged.resources,
+        resourceRates:        merged.resourceRates,
+        infrastructure:       merged.infrastructure,
+        groundOps:            merged.groundOps,
+        orbitalStructures:    merged.orbitalStructures,
+        surveyedSystems:      merged.surveyedSystems,
+        pendingSurveys:       merged.pendingSurveys,
+        colonizedPlanets:     merged.colonizedPlanets,
+        pendingColonizations: merged.pendingColonizations,
+        researchProgress:     merged.researchProgress,
+        researchQueue:        merged.researchQueue,
+        completedResearch:    merged.completedResearch,
+        score:                merged.score,
+        fleets:               merged.fleets,
+        ships:                merged.ships,
+        stations:             merged.stations,
+        controlledSystems:    merged.controlledSystems,
+        diplomacy:            merged.diplomacy,
+        ...(merged.resolvedAnomalies ? { resolvedAnomalies: merged.resolvedAnomalies } : {}),
+      });
+
+      // ── Game-doc systemState writes ───────────────────────────────────────
+      for (const sysId of newlySurveyed) {
+        await updateDoc(gameRef, { [`systemStates.${sysId}.surveyedBy`]: arrayUnion(empire.id) });
+      }
+      for (const stn of newlyBuilt) {
+        await updateDoc(gameRef, { [`systemStates.${stn.systemId}.ownerId`]: empire.id });
+      }
+      for (const w of botSSW) {
+        const value = w.value === 'ARRAY_UNION' ? arrayUnion(empire.id) : w.value;
+        await updateDoc(gameRef, { [w.path]: value });
       }
     }
 
@@ -975,45 +1031,112 @@ export const useGameStore = create<GameStore>((set, get) => ({
         stations:          deltas.stationUpdates[empireId],
         orbitalStructures: deltas.orbitalUpdates[empireId],
       };
-      // Only overwrite these when combat actually mutated them, so we never
-      // clobber a station-claim / colonization that landed earlier this tick.
       if (deltas.controlledChanged.has(empireId)) patch.controlledSystems = deltas.controlledUpdates[empireId];
       if (deltas.colonizedChanged.has(empireId))  patch.colonizedPlanets  = deltas.colonizedUpdates[empireId];
       await updateDoc(doc(db, 'games', currentGame.id, 'empires', empireId), patch);
+
+      // Reflect combat results in the in-memory snapshot for assembly/victory
+      const e = empiresAfterTick[empireId];
+      if (e) {
+        e.ships = deltas.shipUpdates[empireId];
+        e.fleets = deltas.fleetUpdates[empireId];
+        e.stations = deltas.stationUpdates[empireId];
+        e.orbitalStructures = deltas.orbitalUpdates[empireId];
+        if (deltas.controlledChanged.has(empireId)) e.controlledSystems = deltas.controlledUpdates[empireId];
+        if (deltas.colonizedChanged.has(empireId))  e.colonizedPlanets  = deltas.colonizedUpdates[empireId];
+      }
     }
 
-    // Clear ownership of systems that were freed in combat
     for (const sysId of deltas.ownershipCleared) {
-      await updateDoc(doc(db, 'games', currentGame.id), {
+      await updateDoc(gameRef, {
         [`systemStates.${sysId}.ownerId`]: null,
         [`systemStates.${sysId}.stationId`]: null,
       });
     }
+    eventsToEmit.push(...deltas.events);
 
-    // Emit combat / conquest events
-    for (const evt of deltas.events) {
+    // ─── Galactic Assembly: close & apply resolutions ─────────────────────────
+    const assembly = resolveAssembly(Object.values(empiresAfterTick), currentGame, newTick);
+    if (assembly.changed) {
+      await updateDoc(gameRef, { assembly: assembly.updatedAssembly });
+      for (const [eid, grant] of Object.entries(assembly.grants)) {
+        const e = empiresAfterTick[eid];
+        if (!e) continue;
+        const res = { ...e.resources };
+        for (const [k, v] of Object.entries(grant) as [keyof Resources, number][]) res[k] = (res[k] ?? 0) + v;
+        e.resources = res;
+        await updateDoc(doc(db, 'games', currentGame.id, 'empires', eid), { resources: res });
+      }
+      for (const eid of Array.from(assembly.peaceEmpireIds)) {
+        const e = empiresAfterTick[eid];
+        if (!e || !(e.diplomacy ?? []).some(d => d.status === 'at_war')) continue;
+        const dip = e.diplomacy.map(d => d.status === 'at_war' ? { ...d, status: 'neutral' as const } : d);
+        e.diplomacy = dip;
+        await updateDoc(doc(db, 'games', currentGame.id, 'empires', eid), { diplomacy: dip });
+      }
+      eventsToEmit.push(...assembly.events);
+    }
+
+    // ─── Victory check ────────────────────────────────────────────────────────
+    const vic = checkVictory(Object.values(empiresAfterTick), { ...currentGame, tick: newTick }, newTick);
+    if (vic) {
+      await updateDoc(gameRef, {
+        status: 'finished',
+        winnerId: vic.winnerId,
+        winnerName: vic.winnerName,
+        victoryType: vic.victoryType,
+      });
+      eventsToEmit.push({
+        id: `evt_${newTick}_victory`,
+        type: 'conquest',
+        message: `${vic.winnerName} has achieved a ${vic.victoryType.toUpperCase()} victory!`,
+        tick: newTick, empireId: vic.winnerId,
+      });
+    }
+
+    // ─── Emit all accumulated events ──────────────────────────────────────────
+    for (const evt of eventsToEmit) {
       await addDoc(collection(db, 'games', currentGame.id, 'events'), evt);
     }
   },
 }));
 
 // ─── Fleet movement helpers ────────────────────────────────────────────────────
-function processFleetMovement(fleet: Fleet, ships: Ship[]): Fleet {
+function processFleetMovement(fleet: Fleet, ships: Ship[], galaxy: import('@/types/game').GalaxyData): Fleet {
   const fleetShips = ships.filter(s => fleet.shipIds.includes(s.id));
   const fleetSpeed = fleetShips.length > 0
     ? Math.max(1, Math.min(...fleetShips.map(s => s.speed || 5)))
     : 5;
 
-  // In-transit (between systems)
+  // In-transit (between systems) — travel time scales with hyperlane distance
   if (fleet.state === 'in_transit' && fleet.transitToSystemId !== undefined) {
-    const progress = (fleet.transitProgress ?? 0) + fleetSpeed / 500;
+    const from = fleet.transitFromSystemId ?? fleet.systemId;
+    const to   = fleet.transitToSystemId;
+    const legDist = Math.max(80, systemDistance(galaxy, from, to));
+    const inc = Math.max(0.03, fleetSpeed / (legDist * 0.5));
+    const progress = (fleet.transitProgress ?? 0) + inc;
+
     if (progress >= 1) {
-      // Arrived; strip all transit/movement fields (Firestore rejects `undefined`)
-      const { transitToSystemId, transitFromSystemId, transitProgress, targetPosX, targetPosY, task, ...rest } = fleet;
+      const remaining = (fleet.transitPath ?? [to]).slice(1); // drop the hop just completed
+      if (remaining.length > 0) {
+        // Continue to the next hop along the path (keep the attack/move task)
+        const { targetPosX, targetPosY, ...rest } = fleet;
+        return {
+          ...rest,
+          systemId: to,
+          transitFromSystemId: to,
+          transitToSystemId: remaining[0],
+          transitPath: remaining,
+          transitProgress: 0,
+          state: 'in_transit' as const,
+        };
+      }
+      // Final arrival — strip transit fields but KEEP task so attacks trigger
+      const { transitToSystemId, transitFromSystemId, transitProgress, transitPath, targetPosX, targetPosY, ...rest } = fleet;
       return {
         ...rest,
-        systemId: transitToSystemId,
-        posX: 0.1,
+        systemId: to,
+        posX: 0.15,
         posY: 0.5,
         state: 'idle' as const,
       };
@@ -1065,77 +1188,26 @@ function applyShipSystemFromTransitedFleets(ships: Ship[], fleets: Fleet[]): Shi
   });
 }
 
-async function executeBotAction(action: ReturnType<typeof decideBotAction>, empire: Empire, game: GameMeta, tick: number) {
-  const store = useGameStore.getState();
-  const empireRef = doc(db, 'games', game.id, 'empires', empire.id);
+// Heal non-fighting ships: faster in controlled space and at shipyards, plus
+// any built-in repair_bay tiles. Ships still under construction don't regen.
+function repairShips(empire: Empire, ships: Ship[], fleets: Fleet[], tick: number): Ship[] {
+  const fighting = new Set<string>();
+  for (const f of fleets) if (f.state === 'fighting') for (const sid of f.shipIds) fighting.add(sid);
 
-  switch (action.type) {
-    case 'survey': {
-      const { systemId } = action.payload as { systemId: string };
-      if (!empire.surveyedSystems.includes(systemId)) {
-        await updateDoc(empireRef, { surveyedSystems: [...empire.surveyedSystems, systemId] });
-        await updateDoc(doc(db, 'games', game.id), {
-          [`systemStates.${systemId}.surveyedBy`]: arrayUnion(empire.id),
-        });
-      }
-      break;
-    }
-    case 'build_station': {
-      const { systemId } = action.payload as { systemId: string };
-      const cfg = STATION_CONFIG.space_station;
-      if (!canAfford(empire.resources, cfg)) break;
-      const state = game.systemStates[systemId];
-      if (state?.ownerId || state?.stationId) break; // already owned or being built
+  const controlled = new Set(empire.controlledSystems);
+  const shipyardSystems = new Set<string>();
+  for (const i of empire.infrastructure) if (i.type === 'shipyard' && i.active) shipyardSystems.add(i.systemId);
+  for (const o of (empire.orbitalStructures ?? [])) if (o.type === 'orbital_shipyard' && o.active) shipyardSystems.add(o.systemId);
 
-      const station = {
-        id: `station_${Date.now()}_${empire.id}`,
-        type: 'space_station' as StationType,
-        systemId, level: 1, ownerId: empire.id,
-        buildStartedTick: tick, buildCompletedTick: tick + cfg.buildTicks,
-        hp: cfg.hp, maxHp: cfg.hp,
-      };
-      const newResources = deductCosts(empire.resources, cfg);
-      // Reserve slot; ownership is granted when construction completes (in processTick)
-      await updateDoc(empireRef, {
-        resources: newResources,
-        stations: [...empire.stations, station],
-      });
-      await updateDoc(doc(db, 'games', game.id), {
-        [`systemStates.${systemId}.stationId`]: station.id,
-      });
-      break;
-    }
-    case 'colonize': {
-      const { systemId, planetId } = action.payload as { systemId: string; planetId: string };
-      if (empire.colonizedPlanets.includes(planetId as string)) break;
-      if (empire.resources.credits < 150) break;
-      await updateDoc(empireRef, {
-        colonizedPlanets: [...empire.colonizedPlanets, planetId],
-        resources: { ...empire.resources, credits: empire.resources.credits - 150 },
-      });
-      break;
-    }
-    case 'build_infra': {
-      const { planetId, systemId, type } = action.payload as { planetId: string; systemId: string; type: InfraType };
-      if (!empire.colonizedPlanets.includes(planetId as string)) break;
-      const cfg = INFRA_CONFIG[type];
-      if (!canAfford(empire.resources, cfg)) break;
-      const usedSlots = countUsedSlots(planetId as string, empire.infrastructure);
-      const planet = game.galaxy.systems.find(s => s.id === systemId)?.planets.find(p => p.id === planetId);
-      if (!planet || usedSlots + cfg.slots > planet.infraSlots) break;
+  return ships.map(s => {
+    if (s.hp >= s.maxHp) return s;
+    if (fighting.has(s.id)) return s;
+    if ((s.buildCompletedTick ?? 0) > tick) return s;
 
-      const infra = {
-        id: `infra_${Date.now()}_${empire.id}`,
-        type, level: 1, planetId, systemId,
-        buildStartedTick: tick,
-        buildCompletedTick: tick + cfg.buildTicks,
-        active: false,
-      };
-      await updateDoc(empireRef, {
-        resources: deductCosts(empire.resources, cfg),
-        infrastructure: [...empire.infrastructure, infra],
-      });
-      break;
-    }
-  }
+    let regen = s.tiles.filter(t => t.type === 'repair_bay').length * 5;
+    if (controlled.has(s.systemId))      regen += Math.ceil(s.maxHp * 0.04);
+    if (shipyardSystems.has(s.systemId)) regen += Math.ceil(s.maxHp * 0.06);
+    if (regen <= 0) return s;
+    return { ...s, hp: Math.min(s.maxHp, s.hp + regen) };
+  });
 }

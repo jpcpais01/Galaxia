@@ -77,7 +77,7 @@ export default function GalaxyCanvas() {
   const bgRef     = useRef<BgStar[][]>([[], [], []]);
   const nebRef    = useRef<Nebula[]>([]);
 
-  const { currentGame, empires, ui, selectSystem, setCamera, setHoverSystem } = useGameStore();
+  const { currentGame, empires, ui, selectSystem, setCamera, setHoverSystem, moveFleet } = useGameStore();
   const { user } = useAuthStore();
 
   /* World ↔ screen conversions */
@@ -525,6 +525,52 @@ export default function GalaxyCanvas() {
       ctx.globalAlpha = 1;
     }
 
+    /* ── 7.5 In-transit fleets (moving between systems along hyperlanes) ── */
+    for (const empire of empires) {
+      for (const fleet of (empire.fleets ?? [])) {
+        if (fleet.state !== 'in_transit' || !fleet.transitToSystemId) continue;
+        const from = systems.find(s => s.id === (fleet.transitFromSystemId ?? fleet.systemId));
+        const to   = systems.find(s => s.id === fleet.transitToSystemId);
+        if (!from || !to) continue;
+        const prog = fleet.transitProgress ?? 0;
+        const wx = from.x + (to.x - from.x) * prog;
+        const wy = from.y + (to.y - from.y) * prog;
+        const { sx, sy } = w2s(wx, wy, CW, CH);
+        const { sx: tx, sy: ty } = w2s(to.x, to.y, CW, CH);
+
+        // Trail toward destination
+        ctx.strokeStyle = empire.color;
+        ctx.globalAlpha = 0.35;
+        ctx.lineWidth = 1;
+        ctx.setLineDash([3, 4]);
+        ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(tx, ty); ctx.stroke();
+        ctx.setLineDash([]);
+
+        // Fleet marker (small arrowhead pointing toward destination)
+        const ang = Math.atan2(ty - sy, tx - sx);
+        ctx.save();
+        ctx.translate(sx, sy);
+        ctx.rotate(ang);
+        ctx.fillStyle = empire.color;
+        ctx.globalAlpha = 1;
+        ctx.beginPath();
+        ctx.moveTo(6, 0); ctx.lineTo(-4, -3); ctx.lineTo(-4, 3);
+        ctx.closePath(); ctx.fill();
+        ctx.restore();
+
+        // Glow + count
+        ctx.fillStyle = empire.color;
+        ctx.globalAlpha = 0.25;
+        ctx.beginPath(); ctx.arc(sx, sy, 6, 0, Math.PI * 2); ctx.fill();
+        ctx.globalAlpha = 1;
+        ctx.font = '7px Share Tech Mono';
+        ctx.textAlign = 'center';
+        ctx.fillStyle = '#c0d0e0';
+        ctx.fillText(String(fleet.shipIds.length), sx, sy - 8);
+      }
+    }
+    ctx.globalAlpha = 1;
+
     /* ── 8. Screen-space vignette (corners/edges darken) ──────── */
     const vig = ctx.createRadialGradient(
       CW / 2, CH / 2, Math.min(CW, CH) * 0.28,
@@ -598,9 +644,23 @@ export default function GalaxyCanvas() {
     const rect   = c.getBoundingClientRect();
     const { wx, wy } = s2w(e.clientX - rect.left, e.clientY - rect.top, c.width, c.height);
     const hitR2  = (22 / ui.cameraZoom) ** 2;
+
+    // If one of my fleets is selected, clicking a system sends it there.
+    const myEmpire = empires.find(em => em.playerId === user?.uid);
+    const selFleet = ui.selectedFleetId
+      ? myEmpire?.fleets?.find(f => f.id === ui.selectedFleetId)
+      : undefined;
+
     for (const sys of currentGame.galaxy.systems) {
       const dx = sys.x - wx, dy = sys.y - wy;
-      if (dx * dx + dy * dy < hitR2) { selectSystem(sys.id); return; }
+      if (dx * dx + dy * dy < hitR2) {
+        if (selFleet && sys.id !== selFleet.systemId) {
+          moveFleet(selFleet.id, sys.id);
+        } else {
+          selectSystem(sys.id);
+        }
+        return;
+      }
     }
     selectSystem(null);
   };
@@ -614,15 +674,26 @@ export default function GalaxyCanvas() {
 
   const onMouseLeave = () => { dragRef.current = null; setHoverSystem(null); };
 
+  const myEmpireSel = empires.find(em => em.playerId === user?.uid);
+  const selFleet = ui.selectedFleetId ? myEmpireSel?.fleets?.find(f => f.id === ui.selectedFleetId) : undefined;
+
   return (
-    <canvas
-      ref={canvasRef}
-      className="w-full h-full cursor-grab active:cursor-grabbing"
-      onMouseDown={onMouseDown}
-      onMouseMove={onMouseMove}
-      onMouseUp={onMouseUp}
-      onMouseLeave={onMouseLeave}
-      onWheel={onWheel}
-    />
+    <div className="relative w-full h-full">
+      <canvas
+        ref={canvasRef}
+        className="w-full h-full cursor-grab active:cursor-grabbing"
+        onMouseDown={onMouseDown}
+        onMouseMove={onMouseMove}
+        onMouseUp={onMouseUp}
+        onMouseLeave={onMouseLeave}
+        onWheel={onWheel}
+      />
+      {selFleet && (
+        <div className="absolute top-3 left-1/2 -translate-x-1/2 pixel-panel px-3 py-1.5 text-[9px] font-mono flex items-center gap-3" style={{ borderColor: '#44aaff' }}>
+          <span className="text-accent-cyan font-pixel text-[9px]">{selFleet.name}</span>
+          <span className="text-[#8aa0b0]">click a system to send · {selFleet.shipIds.length} ship(s)</span>
+        </div>
+      )}
+    </div>
   );
 }

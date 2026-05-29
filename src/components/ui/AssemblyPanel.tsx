@@ -1,21 +1,22 @@
 'use client';
 import { useState } from 'react';
 import { useGameStore } from '@/store/game-store';
+import { ASSEMBLY_RESOLUTIONS, type AssemblyResolutionKey } from '@/lib/game/world';
+
+const RESOLUTION_KEYS = Object.keys(ASSEMBLY_RESOLUTIONS) as AssemblyResolutionKey[];
 
 export default function AssemblyPanel() {
   const { currentGame, myEmpire, empires, setPanel, proposeAssemblyVote, castAssemblyVote } = useGameStore();
   const [proposing, setProposing] = useState(false);
-  const [title, setTitle] = useState('');
-  const [desc, setDesc]  = useState('');
-  const [effect, setEffect] = useState('');
+  const [resKey, setResKey] = useState<AssemblyResolutionKey>('research_grant');
 
   const votes = currentGame?.assembly ?? [];
   const tick  = currentGame?.tick ?? 0;
 
   const submit = async () => {
-    await proposeAssemblyVote(title, desc, effect);
+    const res = ASSEMBLY_RESOLUTIONS[resKey];
+    await proposeAssemblyVote(res.label, res.description, resKey);
     setProposing(false);
-    setTitle(''); setDesc(''); setEffect('');
   };
 
   return (
@@ -36,27 +37,29 @@ export default function AssemblyPanel() {
 
         {proposing && (
           <div className="flex flex-col gap-2 bg-[#050510] border border-[#1a2a1a] p-3">
-            <input
-              value={title}
-              onChange={e => setTitle(e.target.value)}
-              placeholder="Resolution title"
-              className="bg-[#030308] border border-[#1a1a2a] text-[#c0d0e0] font-mono text-sm px-2 py-1 focus:outline-none"
-            />
-            <textarea
-              value={desc}
-              onChange={e => setDesc(e.target.value)}
-              placeholder="Description"
-              rows={2}
-              className="bg-[#030308] border border-[#1a1a2a] text-[#c0d0e0] font-mono text-xs px-2 py-1 focus:outline-none resize-none"
-            />
-            <input
-              value={effect}
-              onChange={e => setEffect(e.target.value)}
-              placeholder="Effect (e.g. +10% resource rates for all)"
-              className="bg-[#030308] border border-[#1a1a2a] text-[#c0d0e0] font-mono text-xs px-2 py-1 focus:outline-none"
-            />
-            <button onClick={submit} disabled={!title} className="btn-green text-[9px]">
-              SUBMIT
+            <div className="font-pixel text-[8px] text-[#3a5a6a]">CHOOSE RESOLUTION</div>
+            <div className="flex flex-col gap-1">
+              {RESOLUTION_KEYS.map(k => {
+                const r = ASSEMBLY_RESOLUTIONS[k];
+                const sel = resKey === k;
+                return (
+                  <button
+                    key={k}
+                    onClick={() => setResKey(k)}
+                    className="text-left px-2 py-1.5 border font-mono text-[9px]"
+                    style={{
+                      borderColor: sel ? '#44ff88' : '#1a2a1a',
+                      background: sel ? '#08210f' : '#030308',
+                    }}
+                  >
+                    <div className="font-pixel text-[8px]" style={{ color: sel ? '#44ff88' : '#c0d0e0' }}>{r.label}</div>
+                    <div className="text-[8px] text-[#5a7a6a]">{r.description}</div>
+                  </button>
+                );
+              })}
+            </div>
+            <button onClick={submit} className="btn-green text-[9px]">
+              SUBMIT FOR VOTE
             </button>
           </div>
         )}
@@ -84,8 +87,15 @@ export default function AssemblyPanel() {
                 </div>
               </div>
               <div className="font-mono text-[10px] text-[#4a6a7a]">{vote.description}</div>
-              {vote.effect && (
-                <div className="font-mono text-[9px] text-[#ffaa00]">Effect: {vote.effect}</div>
+              {vote.effect && ASSEMBLY_RESOLUTIONS[vote.effect as AssemblyResolutionKey] && (
+                <div className="font-mono text-[9px] text-[#ffaa00]">
+                  Effect: {ASSEMBLY_RESOLUTIONS[vote.effect as AssemblyResolutionKey].description}
+                </div>
+              )}
+              {vote.resolved && (
+                <div className="font-pixel text-[8px]" style={{ color: vote.passed ? '#44ff88' : '#ff4455' }}>
+                  {vote.passed ? '✓ PASSED & APPLIED' : '✗ REJECTED'}
+                </div>
               )}
               <div className="flex items-center gap-2">
                 <div className="flex-1 h-1.5 bg-[#050510]">

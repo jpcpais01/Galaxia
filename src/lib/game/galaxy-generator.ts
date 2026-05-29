@@ -286,6 +286,53 @@ export function generateGalaxy(seed: number, systemCount = SYSTEM_COUNT): Galaxy
   return { systems, seed, width: GALAXY_WIDTH, height: GALAXY_HEIGHT, blackHoleSystemId: bhId };
 }
 
+/**
+ * Breadth-first shortest path along hyperlane connections.
+ * Returns the ordered list of system ids to traverse *after* `fromId`
+ * (i.e. excludes the origin, includes the destination), or null if unreachable.
+ * If `allowed` is provided, only those systems may be traversed.
+ */
+export function findPath(
+  galaxy: GalaxyData, fromId: string, toId: string, allowed?: Set<string>,
+): string[] | null {
+  if (fromId === toId) return [];
+  const byId = new Map(galaxy.systems.map(s => [s.id, s] as const));
+  const start = byId.get(fromId);
+  if (!start) return null;
+
+  const prev = new Map<string, string>();
+  const queue: string[] = [fromId];
+  const seen = new Set<string>([fromId]);
+
+  while (queue.length) {
+    const cur = queue.shift()!;
+    if (cur === toId) {
+      const path: string[] = [];
+      let node = toId;
+      while (node !== fromId) { path.unshift(node); node = prev.get(node)!; }
+      return path;
+    }
+    const sys = byId.get(cur);
+    if (!sys) continue;
+    for (const next of sys.connections) {
+      if (seen.has(next)) continue;
+      if (allowed && next !== toId && !allowed.has(next)) continue;
+      seen.add(next);
+      prev.set(next, cur);
+      queue.push(next);
+    }
+  }
+  return null;
+}
+
+/** Euclidean distance between two systems in galaxy units. */
+export function systemDistance(galaxy: GalaxyData, aId: string, bId: string): number {
+  const a = galaxy.systems.find(s => s.id === aId);
+  const b = galaxy.systems.find(s => s.id === bId);
+  if (!a || !b) return 0;
+  return Math.hypot(a.x - b.x, a.y - b.y);
+}
+
 export function findHomeSystem(galaxy: GalaxyData, empireIndex: number): string {
   const systems = [...galaxy.systems];
   const withColonizable = systems.filter(s =>

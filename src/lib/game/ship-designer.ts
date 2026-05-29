@@ -1,7 +1,57 @@
-import type { ShipDesign, ShipTile, ShipTileType } from '@/types/game';
+import type { ShipDesign, ShipTile, ShipTileType, Empire, Ship } from '@/types/game';
 import { TILE_CONFIG } from './constants';
+import { getResearchBonuses } from './economy';
 
 export const GRID_SIZE = 8;
+
+/**
+ * Build a concrete Ship from a design for a given empire, applying both
+ * research (ship_stat) and civilization stat modifiers. Shared by the player
+ * build action and the bot AI so every ship is created consistently.
+ */
+export function instantiateShip(
+  empire: Empire, design: ShipDesign, systemId: string, tick: number, index: number,
+): Ship {
+  const baseHp = design.tiles.reduce((s, t) => s + t.hp, 0);
+  let hpMult = 1, atkMult = 1, defMult = 1, spdMult = 1;
+
+  // Research ship_stat bonuses (treated as percentages)
+  const rs = getResearchBonuses(empire, 'ship_stat');
+  atkMult += (rs['attack']  ?? 0) / 100;
+  defMult += (rs['defense'] ?? 0) / 100;
+  spdMult += (rs['speed']   ?? 0) / 100;
+
+  // Civilization bonuses
+  const civ = empire.civilization;
+  if (civ) {
+    if (civ.traits.includes('resilient'))      hpMult  *= 1.20;
+    if (civ.traits.includes('fragile'))        hpMult  *= 0.80;
+    if (civ.traits.includes('swift'))          spdMult *= 1.20;
+    if (civ.traits.includes('sluggish'))       spdMult *= 0.80;
+    if (civ.culturalFocus === 'militaristic')  { hpMult *= 1.15; atkMult *= 1.15; }
+    if (civ.culturalFocus === 'isolationist')  defMult *= 1.35;
+    if (civ.government   === 'military_junta')  atkMult *= 1.25;
+    if (civ.origin       === 'warrior_clans')   atkMult *= 1.25;
+    if (civ.speciesType  === 'fungal')          spdMult *= 0.85;
+    if (civ.speciesType  === 'crystalline')     hpMult  *= 0.85;
+  }
+
+  const hp = Math.max(1, Math.round(baseHp * hpMult));
+  return {
+    id: `ship_${tick}_${Math.floor(Math.random() * 1_000_000)}`,
+    designId: design.id,
+    designName: design.name,
+    name: `${design.name} ${index}`,
+    ownerId: empire.id,
+    systemId,
+    hp, maxHp: hp,
+    attack:  Math.round(design.attack  * atkMult),
+    defense: Math.round(design.defense * defMult),
+    speed:   Math.max(1, Math.round(design.speed * spdMult)),
+    tiles: design.tiles.map(t => ({ ...t })),
+    buildCompletedTick: tick + design.buildTicks,
+  };
+}
 
 export function calcDesignStats(tiles: ShipTile[]): {
   attack: number; defense: number; speed: number;

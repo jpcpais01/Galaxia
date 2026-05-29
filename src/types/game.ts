@@ -189,9 +189,10 @@ export interface Fleet {
   state: 'idle' | 'moving' | 'in_transit' | 'fighting';
   targetPosX?: number;
   targetPosY?: number;
-  transitToSystemId?: string;
-  transitFromSystemId?: string;
-  transitProgress?: number;  // 0-1
+  transitToSystemId?: string;     // next hop along the path
+  transitFromSystemId?: string;   // system the current leg started from
+  transitProgress?: number;       // 0-1 along the current leg
+  transitPath?: string[];         // remaining systems to traverse (index 0 = next hop)
   task?: FleetTask;
 }
 
@@ -257,7 +258,8 @@ export interface AssemblyVote {
   closesAtTick: number;
   votes: Record<string, boolean>;
   passed?: boolean;
-  effect?: string;
+  resolved?: boolean;   // tallied & applied after closesAtTick
+  effect?: string;      // resolution key (see ASSEMBLY_RESOLUTIONS)
 }
 
 export interface BotMemory {
@@ -293,6 +295,8 @@ export interface Empire {
   surveyedSystems: string[];
   pendingSurveys: PendingSurvey[];
   pendingColonizations: PendingColonization[];
+  resolvedAnomalies?: string[];   // planet ids whose anomaly this empire has claimed
+  eliminated?: boolean;           // lost all systems/stations/ships
   civilization?: Civilization;
   homePlanetId?: string;
   isOnline: boolean;
@@ -352,6 +356,9 @@ export interface GameMeta {
   tick: number;
   lastTickTime: number;
   winnerId?: string;
+  winnerName?: string;
+  victoryType?: 'domination' | 'singularity' | 'score';
+  maxTick?: number;
   seed: number;
   starCount: number;
   galaxy: GalaxyData; // never stored in Firestore — regenerated locally from seed

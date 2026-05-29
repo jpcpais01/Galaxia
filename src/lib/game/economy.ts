@@ -172,6 +172,17 @@ export function computeResourceRates(empire: Empire, currentTick = 0): Resources
     }
   }
 
+  // Population growth: each fed colony grows organically (scaled by bio research)
+  const colonies = empire.colonizedPlanets.length;
+  if (colonies > 0) {
+    const popBonus = 1 + (resourceBonuses['population'] ?? 0) / 100;
+    rates.population += colonies * popBonus;
+  }
+
+  // Trade routes: each trade-partner relation generates commerce income
+  const tradePartners = (empire.diplomacy ?? []).filter(d => d.status === 'trade_partner').length;
+  if (tradePartners > 0) rates.credits += tradePartners * 15;
+
   // ── Apply civilization production bonuses ─────────────────────────────────
   // (done before population consumption so multipliers scale output, not loss)
   applyCivProductionBonuses(empire, rates);
@@ -188,6 +199,10 @@ export function computeResourceRates(empire: Empire, currentTick = 0): Resources
   rates.energy   -= Math.ceil(pop * 0.2);
   rates.credits  += Math.floor(pop * 0.5);
   rates.research += Math.floor(pop / 3);
+
+  // Fleet upkeep: each warship costs credits to maintain
+  const shipCount = empire.ships?.length ?? 0;
+  if (shipCount > 0) rates.credits -= shipCount;
 
   return rates;
 }

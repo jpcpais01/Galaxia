@@ -2,7 +2,7 @@
 import { useGameStore } from '@/store/game-store';
 
 export default function DiplomacyPanel() {
-  const { empires, myEmpire, setPanel, proposeDiplomacy, acceptDiplomacy } = useGameStore();
+  const { empires, myEmpire, setPanel, proposeDiplomacy, acceptDiplomacy, declineDiplomacy } = useGameStore();
   if (!myEmpire) return null;
 
   const others = empires.filter(e => e.id !== myEmpire.id);
@@ -66,7 +66,7 @@ export default function DiplomacyPanel() {
                     <button onClick={() => acceptDiplomacy(empire.id)} className="btn-green text-[9px] flex-1 py-1">
                       ACCEPT
                     </button>
-                    <button className="btn-red text-[9px] flex-1 py-1">
+                    <button onClick={() => declineDiplomacy(empire.id)} className="btn-red text-[9px] flex-1 py-1">
                       DECLINE
                     </button>
                   </div>
@@ -74,7 +74,7 @@ export default function DiplomacyPanel() {
               )}
 
               {/* Propose actions */}
-              {!pending && rel?.status === 'neutral' && (
+              {!pending && (!rel || rel.status === 'neutral') && (
                 <div className="flex flex-wrap gap-1">
                   <button onClick={() => proposeDiplomacy(empire.id, 'non_aggression')} className="btn-gray text-[8px] py-1 px-2">
                     NAP

@@ -157,6 +157,28 @@ function ShipFleetPanel() {
   );
 }
 
+function CombatAlert() {
+  const { events, myEmpire, currentGame } = useGameStore();
+  if (!myEmpire || !currentGame) return null;
+  const tick = currentGame.tick;
+  const mySys = new Set(myEmpire.controlledSystems);
+  const recent = events.find(e =>
+    (e.type === 'combat' || e.type === 'conquest') &&
+    e.tick >= tick - 1 &&
+    (e.targetEmpireId === myEmpire.id || (e.empireId !== myEmpire.id && !!e.systemId && mySys.has(e.systemId)))
+  );
+  if (!recent) return null;
+  return (
+    <div
+      className="absolute top-3 right-3 z-30 pixel-panel px-3 py-1.5 text-[9px] font-mono max-w-xs animate-pulse"
+      style={{ borderColor: '#ff4455', background: '#1a0808ee' }}
+    >
+      <span className="font-pixel text-[8px] text-[#ff4455]">⚠ UNDER ATTACK</span>
+      <div className="text-[#ffaaaa] mt-0.5">{recent.message}</div>
+    </div>
+  );
+}
+
 export default function HUD({ children }: { children: React.ReactNode }) {
   const { ui } = useGameStore();
 
@@ -183,6 +205,7 @@ export default function HUD({ children }: { children: React.ReactNode }) {
         {/* Main canvas */}
         <div className="flex-1 relative overflow-hidden">
           {children}
+          <CombatAlert />
         </div>
 
         {/* Right sidebar */}
