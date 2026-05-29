@@ -111,42 +111,61 @@ function ShipFleetPanel() {
         ))}
 
         {/* Build from design */}
-        {designs.length > 0 && myEmpire.controlledSystems.length > 0 && (
+        {designs.length > 0 && (
           <div>
             <div className="font-pixel text-[8px] text-[#3a5a6a] mb-2">BUILD NEW SHIP</div>
             {(() => {
-              const groundShipyard = myEmpire.infrastructure.find(
-                i => i.type === 'shipyard' && i.active && myEmpire.controlledSystems.includes(i.systemId)
-              );
-              const orbitalShipyard = (myEmpire.orbitalStructures ?? []).find(
-                o => o.type === 'orbital_shipyard' && o.active && myEmpire.controlledSystems.includes(o.systemId)
-              );
-              const yardSystem = groundShipyard?.systemId ?? orbitalShipyard?.systemId;
-              const hasShipyard = !!yardSystem;
+              const tick = currentGame?.tick ?? 0;
+              // An active shipyard (ground or orbital) lets us build. Ownership of
+              // the structure is enough — the system needn't be in controlledSystems.
+              const activeYard =
+                myEmpire.infrastructure.find(i => i.type === 'shipyard' && i.active) ??
+                (myEmpire.orbitalStructures ?? []).find(o => o.type === 'orbital_shipyard' && o.active);
+              // A yard still under construction (so we can explain the wait)
+              const buildingYard = !activeYard
+                ? (myEmpire.infrastructure.find(i => i.type === 'shipyard') ??
+                   (myEmpire.orbitalStructures ?? []).find(o => o.type === 'orbital_shipyard'))
+                : null;
+              const yardSystem = activeYard?.systemId;
+
+              if (!yardSystem) {
+                return (
+                  <div className="font-mono text-[9px] text-[#aa6644] mb-2 text-center">
+                    {buildingYard
+                      ? `Shipyard under construction — ${Math.max(0, (buildingYard.buildCompletedTick ?? 0) - tick)}t left`
+                      : 'Build a ground Shipyard or an Orbital Shipyard first'}
+                  </div>
+                );
+              }
+
               return (
                 <>
-                  {!hasShipyard && (
-                    <div className="font-mono text-[9px] text-[#aa6644] mb-2 text-center">
-                      Build a Shipyard (ground) or Orbital Shipyard first
-                    </div>
-                  )}
                   {designs.map(d => {
-                    const affordable = (myEmpire.resources.minerals ?? 0) >= d.mineralCost &&
-                      (myEmpire.resources.credits ?? 0) >= d.creditCost;
+                    const needMin = (myEmpire.resources.minerals ?? 0) < d.mineralCost;
+                    const needCrd = (myEmpire.resources.credits ?? 0) < d.creditCost;
+                    const needNrg = (myEmpire.resources.energy ?? 0) < d.energyCost;
+                    const affordable = !needMin && !needCrd && !needNrg;
                     return (
                       <button
                         key={d.id}
-                        onClick={() => { if (yardSystem) buildShip(d.id, yardSystem); }}
-                        disabled={!hasShipyard || !affordable}
-                        className="w-full flex items-center justify-between p-2 border border-[#1a1a2a] bg-[#05050f] hover:border-[#2a2a4a] disabled:opacity-40 disabled:cursor-not-allowed mb-1"
+                        onClick={() => buildShip(d.id, yardSystem)}
+                        disabled={!affordable}
+                        className="w-full flex items-center justify-between p-2 border border-[#1a1a2a] bg-[#05050f] hover:border-[#2a2a4a] disabled:opacity-50 disabled:cursor-not-allowed mb-1"
                       >
                         <div className="text-left">
                           <div className="font-pixel text-[9px] text-[#c0d0e0]">{d.name}</div>
-                          <div className="font-mono text-[9px] text-[#3a5a6a]">
-                            {d.mineralCost}min · {d.creditCost}crd · {d.buildTicks}t
+                          <div className="font-mono text-[9px]">
+                            <span style={{ color: needMin ? '#ff4455' : '#3a5a6a' }}>{d.mineralCost}min</span>
+                            <span className="text-[#3a5a6a]"> · </span>
+                            <span style={{ color: needCrd ? '#ff4455' : '#3a5a6a' }}>{d.creditCost}crd</span>
+                            <span className="text-[#3a5a6a]"> · </span>
+                            <span style={{ color: needNrg ? '#ff4455' : '#3a5a6a' }}>{d.energyCost}nrg</span>
+                            <span className="text-[#3a5a6a]"> · {d.buildTicks}t</span>
                           </div>
                         </div>
-                        <span className="font-pixel text-[8px] text-[#44aaff]">BUILD</span>
+                        <span className="font-pixel text-[8px]" style={{ color: affordable ? '#44aaff' : '#5a3a3a' }}>
+                          {affordable ? 'BUILD' : 'NEED RES'}
+                        </span>
                       </button>
                     );
                   })}
