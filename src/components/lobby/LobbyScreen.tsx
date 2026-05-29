@@ -85,6 +85,8 @@ function CreateGameModal({ onClose, civilization }: { onClose: () => void; civil
             >
               <option value={100}>100 stars</option>
               <option value={200}>200 stars</option>
+              <option value={300}>300 stars</option>
+              <option value={500}>500 stars</option>
             </select>
           </div>
         </div>

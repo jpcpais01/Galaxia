@@ -187,7 +187,12 @@ function poissonDisk(rng: SeededRandom, width: number, height: number, count: nu
 export function generateGalaxy(seed: number, systemCount = SYSTEM_COUNT): GalaxyData {
   const rng = new SeededRandom(seed);
 
-  const positions = poissonDisk(rng, GALAXY_WIDTH, GALAXY_HEIGHT, systemCount, MIN_SYSTEM_DISTANCE);
+  // Keep stellar density roughly constant as the galaxy fills up: the fixed
+  // 4000×4000 field can't fit 300-500 stars at the 100-star spacing, so shrink
+  // the minimum separation as star count grows (sqrt keeps density ~constant).
+  const minDist = Math.max(70, MIN_SYSTEM_DISTANCE * Math.sqrt(100 / Math.max(1, systemCount)));
+
+  const positions = poissonDisk(rng, GALAXY_WIDTH, GALAXY_HEIGHT, systemCount, minDist);
 
   const systems: StarSystem[] = positions.map((pos, i) => {
     const sysRng = new SeededRandom(seed + i * 7919);
