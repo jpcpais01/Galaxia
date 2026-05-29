@@ -16,8 +16,7 @@ import { createBotEmpire, decideBotAction } from '@/lib/game/bot-ai';
 import { applyTick, canAfford, deductCosts, countUsedSlots } from '@/lib/game/economy';
 import { INFRA_CONFIG, STATION_CONFIG, GROUND_OP_CONFIG, ORBITAL_CONFIG, EMPIRE_COLORS, STARTING_RESOURCES, GAME_TICK_MS, SYSTEM_COUNT } from '@/lib/game/constants';
 import { STARTER_DESIGNS } from '@/lib/game/ship-designer';
-import { combatRound, computeFleetDamageToStation } from '@/lib/game/combat';
-import { SeededRandom } from '@/lib/noise';
+import { resolveAllCombat } from '@/lib/game/combat';
 
 interface GameStore {
   // Lobby
@@ -140,7 +139,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const homeId        = findHomeSystem(galaxy, 0);
     const homeSystem    = galaxy.systems.find(s => s.id === homeId)!;
     const homePlanet    = homeSystem.planets.filter(p => p.colonizable).sort((a, b) => b.similarity - a.similarity)[0] ?? null;
-    const homeStation   = { id: `stn_home_${hostEmpireId}`, type: 'space_station' as StationType, systemId: homeId, level: 1, ownerId: hostEmpireId, buildStartedTick: 0, buildCompletedTick: 0 };
+    const homeStation   = { id: `stn_home_${hostEmpireId}`, type: 'space_station' as StationType, systemId: homeId, level: 1, ownerId: hostEmpireId, buildStartedTick: 0, buildCompletedTick: 0, hp: STATION_CONFIG.space_station.hp, maxHp: STATION_CONFIG.space_station.hp };
     const startPop      = homePlanet ? 10 + (homePlanet.size - 1) * 2 : 10;
 
     const systemStates: Record<string, SystemState> = {};
@@ -214,7 +213,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const homeSystem  = galaxy.systems.find(s => s.id === homeId)!;
     const homePlanet  = homeSystem.planets.filter(p => p.colonizable).sort((a, b) => b.similarity - a.similarity)[0] ?? null;
     const empireId    = `empire_${playerId}`;
-    const homeStation = { id: `stn_home_${empireId}`, type: 'space_station' as StationType, systemId: homeId, level: 1, ownerId: empireId, buildStartedTick: 0, buildCompletedTick: 0 };
+    const homeStation = { id: `stn_home_${empireId}`, type: 'space_station' as StationType, systemId: homeId, level: 1, ownerId: empireId, buildStartedTick: 0, buildCompletedTick: 0, hp: STATION_CONFIG.space_station.hp, maxHp: STATION_CONFIG.space_station.hp };
     const startPop    = homePlanet ? 10 + (homePlanet.size - 1) * 2 : 10;
 
     const startResources = applyOriginBonus(
@@ -274,7 +273,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       const homeSystem = game.galaxy.systems.find(s => s.id === homeId)!;
       const homePlanet = homeSystem.planets.filter(p => p.colonizable).sort((a, b) => b.similarity - a.similarity)[0] ?? null;
       const botId      = `bot_empire_${i}`;
-      const homeStation = { id: `stn_home_${botId}`, type: 'space_station' as StationType, systemId: homeId, level: 1, ownerId: botId, buildStartedTick: 0, buildCompletedTick: 0 };
+      const homeStation = { id: `stn_home_${botId}`, type: 'space_station' as StationType, systemId: homeId, level: 1, ownerId: botId, buildStartedTick: 0, buildCompletedTick: 0, hp: STATION_CONFIG.space_station.hp, maxHp: STATION_CONFIG.space_station.hp };
 
       const botData = createBotEmpire(i, homeId, existingCount + game.botCount);
       const botStartPop = homePlanet ? 10 + (homePlanet.size - 1) * 2 : 10;
@@ -433,6 +432,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
       ownerId: myEmpire.id,
       buildStartedTick: currentGame.tick,
       buildCompletedTick: currentGame.tick + cfg.buildTicks,
+      hp: cfg.hp,
+      maxHp: cfg.hp,
     };
 
     const updatedStations = [...myEmpire.stations, station];
@@ -964,13 +965,34 @@ export const useGameStore = create<GameStore>((set, get) => ({
       }
     }
 
-    // ─── Fleet combat resolution (single round per tick) ──────────────────────
-    const combatResults = resolveFleetCombat(Object.values(empiresAfterTick), newTick);
-    for (const [empireId, shipPatch] of Object.entries(combatResults.shipUpdates)) {
-      await updateDoc(doc(db, 'games', currentGame.id, 'empires', empireId), {
-        ships: shipPatch,
-        fleets: combatResults.fleetUpdates[empireId] ?? empiresAfterTick[empireId].fleets,
+    // ─── Combat resolution (one simultaneous round per tick) ──────────────────
+    const deltas = resolveAllCombat(Object.values(empiresAfterTick), currentGame, newTick);
+
+    for (const empireId of Array.from(deltas.changedEmpireIds)) {
+      const patch: Record<string, unknown> = {
+        ships:             deltas.shipUpdates[empireId],
+        fleets:            deltas.fleetUpdates[empireId],
+        stations:          deltas.stationUpdates[empireId],
+        orbitalStructures: deltas.orbitalUpdates[empireId],
+      };
+      // Only overwrite these when combat actually mutated them, so we never
+      // clobber a station-claim / colonization that landed earlier this tick.
+      if (deltas.controlledChanged.has(empireId)) patch.controlledSystems = deltas.controlledUpdates[empireId];
+      if (deltas.colonizedChanged.has(empireId))  patch.colonizedPlanets  = deltas.colonizedUpdates[empireId];
+      await updateDoc(doc(db, 'games', currentGame.id, 'empires', empireId), patch);
+    }
+
+    // Clear ownership of systems that were freed in combat
+    for (const sysId of deltas.ownershipCleared) {
+      await updateDoc(doc(db, 'games', currentGame.id), {
+        [`systemStates.${sysId}.ownerId`]: null,
+        [`systemStates.${sysId}.stationId`]: null,
       });
+    }
+
+    // Emit combat / conquest events
+    for (const evt of deltas.events) {
+      await addDoc(collection(db, 'games', currentGame.id, 'events'), evt);
     }
   },
 }));
@@ -1043,113 +1065,6 @@ function applyShipSystemFromTransitedFleets(ships: Ship[], fleets: Fleet[]): Shi
   });
 }
 
-function resolveFleetCombat(
-  empires: Empire[],
-  tick: number
-): {
-  shipUpdates: Record<string, Ship[]>;
-  fleetUpdates: Record<string, Fleet[]>;
-} {
-  const shipUpdates: Record<string, Ship[]> = {};
-  const fleetUpdates: Record<string, Fleet[]> = {};
-
-  // Build (systemId -> fleets[]) of fleets NOT in transit
-  const fleetsBySystem = new Map<string, { fleet: Fleet; empire: Empire }[]>();
-  for (const empire of empires) {
-    for (const fleet of (empire.fleets ?? [])) {
-      if (fleet.state === 'in_transit') continue;
-      const list = fleetsBySystem.get(fleet.systemId) ?? [];
-      list.push({ fleet, empire });
-      fleetsBySystem.set(fleet.systemId, list);
-    }
-  }
-
-  // For each system with multiple fleets, find hostile pairs
-  fleetsBySystem.forEach((fleetList) => {
-    if (fleetList.length < 2) return;
-    for (let i = 0; i < fleetList.length; i++) {
-      for (let j = i + 1; j < fleetList.length; j++) {
-        const A = fleetList[i];
-        const B = fleetList[j];
-        if (A.empire.id === B.empire.id) continue;
-        const aRel = (A.empire.diplomacy ?? []).find((d: { empireId: string }) => d.empireId === B.empire.id);
-        if (aRel?.status !== 'at_war') continue;
-
-        const aShipsCurrent = shipUpdates[A.empire.id] ?? A.empire.ships;
-        const bShipsCurrent = shipUpdates[B.empire.id] ?? B.empire.ships;
-        const aFleetShips = aShipsCurrent.filter(s => A.fleet.shipIds.includes(s.id));
-        const bFleetShips = bShipsCurrent.filter(s => B.fleet.shipIds.includes(s.id));
-        if (aFleetShips.length === 0 || bFleetShips.length === 0) continue;
-
-        const rng = new SeededRandom(tick * 1000 + i * 31 + j);
-        const result = combatRound(aFleetShips, bFleetShips, rng);
-
-        // Merge back
-        const survivingA = new Set(result.attackerShips.map(s => s.id));
-        const survivingB = new Set(result.defenderShips.map(s => s.id));
-        const newAShips = aShipsCurrent
-          .map(s => {
-            if (A.fleet.shipIds.includes(s.id)) {
-              return result.attackerShips.find(r => r.id === s.id) ?? null;
-            }
-            return s;
-          })
-          .filter((s): s is Ship => s !== null && (survivingA.has(s.id) || !A.fleet.shipIds.includes(s.id)));
-        const newBShips = bShipsCurrent
-          .map(s => {
-            if (B.fleet.shipIds.includes(s.id)) {
-              return result.defenderShips.find(r => r.id === s.id) ?? null;
-            }
-            return s;
-          })
-          .filter((s): s is Ship => s !== null && (survivingB.has(s.id) || !B.fleet.shipIds.includes(s.id)));
-
-        shipUpdates[A.empire.id] = newAShips;
-        shipUpdates[B.empire.id] = newBShips;
-
-        // Mark fleets as fighting; remove destroyed ships from shipIds
-        const aFleetsNow = fleetUpdates[A.empire.id] ?? A.empire.fleets ?? [];
-        const bFleetsNow = fleetUpdates[B.empire.id] ?? B.empire.fleets ?? [];
-        fleetUpdates[A.empire.id] = aFleetsNow.map(f =>
-          f.id === A.fleet.id
-            ? { ...f, state: 'fighting' as const, shipIds: f.shipIds.filter(sid => survivingA.has(sid)) }
-            : f
-        );
-        fleetUpdates[B.empire.id] = bFleetsNow.map(f =>
-          f.id === B.fleet.id
-            ? { ...f, state: 'fighting' as const, shipIds: f.shipIds.filter(sid => survivingB.has(sid)) }
-            : f
-        );
-      }
-    }
-  });
-
-  // Process fleet vs station attacks
-  for (const empire of empires) {
-    for (const fleet of (empire.fleets ?? [])) {
-      if (fleet.task?.type !== 'attack_station') continue;
-      if (fleet.state === 'in_transit') continue;
-      const targetEmpire = empires.find(e => e.id === fleet.task?.targetEmpireId);
-      if (!targetEmpire) continue;
-      const targetStation = targetEmpire.stations.find(s => s.systemId === fleet.systemId);
-      if (!targetStation) continue;
-      const fleetShips = (shipUpdates[empire.id] ?? empire.ships).filter(s => fleet.shipIds.includes(s.id));
-      if (fleetShips.length === 0) continue;
-      const stnCfg = STATION_CONFIG[targetStation.type];
-      const damage = computeFleetDamageToStation(fleet, fleetShips, stnCfg.hp / 10);
-      // Apply damage to station (we treat the station HP loosely here)
-      const updatedStations = targetEmpire.stations.map(s =>
-        s.id === targetStation.id ? { ...s } : s
-      );
-      // (Station HP not tracked in current schema beyond config — placeholder for future use)
-      void damage;
-      void updatedStations;
-    }
-  }
-
-  return { shipUpdates, fleetUpdates };
-}
-
 async function executeBotAction(action: ReturnType<typeof decideBotAction>, empire: Empire, game: GameMeta, tick: number) {
   const store = useGameStore.getState();
   const empireRef = doc(db, 'games', game.id, 'empires', empire.id);
@@ -1177,6 +1092,7 @@ async function executeBotAction(action: ReturnType<typeof decideBotAction>, empi
         type: 'space_station' as StationType,
         systemId, level: 1, ownerId: empire.id,
         buildStartedTick: tick, buildCompletedTick: tick + cfg.buildTicks,
+        hp: cfg.hp, maxHp: cfg.hp,
       };
       const newResources = deductCosts(empire.resources, cfg);
       // Reserve slot; ownership is granted when construction completes (in processTick)

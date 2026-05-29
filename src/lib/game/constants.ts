@@ -92,12 +92,14 @@ export const STATION_CONFIG: Record<StationType, {
   creditCost: number;
   icon: string;
   hp: number;
+  attack: number;   // damage dealt to hostile fleets per combat round
+  defense: number;  // mitigates incoming damage
 }> = {
-  space_station:    { label: 'Space Station',    buildTicks: 50, mineralCost: 300, energyCost: 0,  creditCost: 200, icon: '🛰', hp: 500 },
-  mining_station:   { label: 'Mining Station',   buildTicks: 20, mineralCost: 200, energyCost: 0,  creditCost: 100, icon: '⛏', hp: 300 },
-  military_outpost: { label: 'Military Outpost', buildTicks: 40, mineralCost: 400, energyCost: 40, creditCost: 250, icon: '🔫', hp: 800 },
-  research_station: { label: 'Research Station', buildTicks: 35, mineralCost: 350, energyCost: 30, creditCost: 200, icon: '🔭', hp: 400 },
-  stargate:         { label: 'Stargate',         buildTicks: 100, mineralCost: 1000, energyCost: 200, creditCost: 800, icon: '🌀', hp: 1200 },
+  space_station:    { label: 'Space Station',    buildTicks: 50,  mineralCost: 300,  energyCost: 0,   creditCost: 200, icon: '🛰', hp: 500,  attack: 15, defense: 20 },
+  mining_station:   { label: 'Mining Station',   buildTicks: 20,  mineralCost: 200,  energyCost: 0,   creditCost: 100, icon: '⛏', hp: 300,  attack: 0,  defense: 10 },
+  military_outpost: { label: 'Military Outpost', buildTicks: 40,  mineralCost: 400,  energyCost: 40,  creditCost: 250, icon: '🔫', hp: 800,  attack: 40, defense: 30 },
+  research_station: { label: 'Research Station', buildTicks: 35,  mineralCost: 350,  energyCost: 30,  creditCost: 200, icon: '🔭', hp: 400,  attack: 0,  defense: 10 },
+  stargate:         { label: 'Stargate',         buildTicks: 100, mineralCost: 1000, energyCost: 200, creditCost: 800, icon: '🌀', hp: 1200, attack: 0,  defense: 40 },
 };
 
 export const GROUND_OP_CONFIG: Record<GroundOpType, {

@@ -47,21 +47,35 @@ export default function FleetPanel() {
     setView('system');
   };
 
-  // Find hostile fleets nearby for attack options
-  const hostileTargets = selectedFleet ? (() => {
-    const enemies: { fleetId: string; empireId: string; empireName: string; fleetName: string }[] = [];
+  // Enemy assets present in the selected fleet's system (any non-self empire).
+  // Engagement is "war OR attack orders" — the player may target any foreign
+  // fleet / station / colony that shares the system.
+  const sysId = selectedFleet?.systemId;
+  const enemyFleets:   { fleetId: string; empireId: string; empireName: string; fleetName: string; ships: number }[] = [];
+  const enemyStations: { empireId: string; empireName: string }[] = [];
+  const enemyPlanets:  { planetId: string; empireId: string; empireName: string; planetName: string }[] = [];
+  if (selectedFleet && sysId) {
+    const sys = currentGame.galaxy.systems.find(s => s.id === sysId);
     for (const e of empires) {
       if (e.id === myEmpire.id) continue;
-      const rel = (myEmpire.diplomacy ?? []).find(d => d.empireId === e.id);
-      if (rel?.status !== 'at_war') continue;
       for (const f of (e.fleets ?? [])) {
-        if (f.systemId === selectedFleet.systemId) {
-          enemies.push({ fleetId: f.id, empireId: e.id, empireName: e.username, fleetName: f.name });
+        if (f.systemId === sysId && f.state !== 'in_transit') {
+          enemyFleets.push({ fleetId: f.id, empireId: e.id, empireName: e.username, fleetName: f.name, ships: f.shipIds.length });
         }
       }
+      if ((e.stations ?? []).some(s => s.systemId === sysId)) {
+        enemyStations.push({ empireId: e.id, empireName: e.username });
+      }
+      for (const pid of (e.colonizedPlanets ?? [])) {
+        const planet = sys?.planets.find(p => p.id === pid);
+        if (planet) enemyPlanets.push({ planetId: pid, empireId: e.id, empireName: e.username, planetName: planet.name });
+      }
     }
-    return enemies;
-  })() : [];
+  }
+  const hasEnemyTargets = enemyFleets.length + enemyStations.length + enemyPlanets.length > 0;
+  const activeTaskKey = selectedFleet?.task
+    ? `${selectedFleet.task.type}:${selectedFleet.task.targetFleetId ?? ''}:${selectedFleet.task.targetEmpireId ?? ''}:${selectedFleet.task.targetPlanetId ?? ''}`
+    : '';
 
   return (
     <div className="flex flex-col h-full">
@@ -237,23 +251,73 @@ export default function FleetPanel() {
                   </div>
                 </div>
 
-                {hostileTargets.length > 0 && (
-                  <div className="flex flex-col gap-1">
-                    <div className="font-pixel text-[7px] text-[#ff4455]">ATTACK HOSTILE FLEET</div>
-                    {hostileTargets.map(t => (
-                      <button
-                        key={t.fleetId}
-                        onClick={() => setFleetTask(selectedFleet.id, {
-                          type: 'attack_fleet',
-                          targetFleetId: t.fleetId,
-                          targetEmpireId: t.empireId,
-                        } as FleetTask)}
-                        className="text-[8px] py-1 px-2 border border-[#3a1a1a] text-[#ff8888] hover:border-[#ff4455]"
-                      >
-                        {t.empireName}: {t.fleetName}
-                      </button>
-                    ))}
+                {/* Current order + stand down */}
+                {selectedFleet.task && (
+                  <div className="flex items-center justify-between text-[8px] py-1 px-2 border border-[#3a1a1a] bg-[#1a0808]">
+                    <span className="text-[#ff8866]">⚔ {selectedFleet.task.type.replace('_', ' ')}</span>
+                    <button
+                      onClick={() => setFleetTask(selectedFleet.id, null)}
+                      className="text-[#aa6644] hover:text-[#ffaa66]"
+                    >STAND DOWN</button>
                   </div>
+                )}
+
+                {hasEnemyTargets ? (
+                  <div className="flex flex-col gap-1">
+                    <div className="font-pixel text-[7px] text-[#ff4455]">ATTACK TARGETS IN SYSTEM</div>
+
+                    {enemyFleets.map(t => {
+                      const key = `attack_fleet:${t.fleetId}::`;
+                      const active = activeTaskKey.startsWith(`attack_fleet:${t.fleetId}:`);
+                      return (
+                        <button
+                          key={t.fleetId}
+                          onClick={() => setFleetTask(selectedFleet.id, {
+                            type: 'attack_fleet', targetFleetId: t.fleetId, targetEmpireId: t.empireId,
+                          } as FleetTask)}
+                          className="flex justify-between text-[8px] py-1 px-2 border text-[#ff8888]"
+                          style={{ borderColor: active ? '#ff4455' : '#3a1a1a', background: active ? '#2a0a0a' : 'transparent' }}
+                        >
+                          <span>🚀 {t.empireName}: {t.fleetName}</span>
+                          <span className="text-[#aa6666]">{t.ships}</span>
+                        </button>
+                      );
+                    })}
+
+                    {enemyStations.map(t => {
+                      const active = activeTaskKey === `attack_station::${t.empireId}:`;
+                      return (
+                        <button
+                          key={`stn_${t.empireId}`}
+                          onClick={() => setFleetTask(selectedFleet.id, {
+                            type: 'attack_station', targetEmpireId: t.empireId,
+                          } as FleetTask)}
+                          className="flex justify-between text-[8px] py-1 px-2 border text-[#ffaa88]"
+                          style={{ borderColor: active ? '#ff4455' : '#3a1a1a', background: active ? '#2a0a0a' : 'transparent' }}
+                        >
+                          <span>🛰 {t.empireName}: Station</span>
+                        </button>
+                      );
+                    })}
+
+                    {enemyPlanets.map(t => {
+                      const active = activeTaskKey === `attack_planet:::${t.planetId}`;
+                      return (
+                        <button
+                          key={`pl_${t.planetId}`}
+                          onClick={() => setFleetTask(selectedFleet.id, {
+                            type: 'attack_planet', targetPlanetId: t.planetId, targetEmpireId: t.empireId,
+                          } as FleetTask)}
+                          className="flex justify-between text-[8px] py-1 px-2 border text-[#ffcc88]"
+                          style={{ borderColor: active ? '#ff4455' : '#3a1a1a', background: active ? '#2a0a0a' : 'transparent' }}
+                        >
+                          <span>🌍 {t.empireName}: {t.planetName}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="text-[8px] text-[#3a5a6a] px-1">No enemy targets in this system. Move the fleet to an enemy system to engage.</div>
                 )}
 
                 <button

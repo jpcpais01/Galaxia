@@ -25,6 +25,13 @@ yarn-error.log*
 # Vercel
 .vercel
 
+# TypeScript incremental build cache
+tsconfig.tsbuildinfo
+
+# Claude Code local worktrees / stray logs
+.claude/worktrees/
+*galaxia-dev.log
+
 # PWA generated files
 /public/sw.js
 /public/sw.js.map

@@ -129,6 +129,8 @@ export interface Station {
   ownerId: string;
   buildStartedTick: number;
   buildCompletedTick: number;
+  hp?: number;      // current hull; defaults to STATION_CONFIG hp when absent
+  maxHp?: number;
 }
 
 export interface ShipTile {

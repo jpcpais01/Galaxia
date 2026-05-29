@@ -1,10 +1,16 @@
 'use client';
 import { useRef, useEffect, useCallback } from 'react';
 import { useGameStore } from '@/store/game-store';
-import { STAR_CONFIG, PLANET_CONFIG } from '@/lib/game/constants';
+import { STAR_CONFIG, PLANET_CONFIG, STATION_CONFIG } from '@/lib/game/constants';
 import { renderPlanetSync, preloadPlanets } from '@/lib/game/planet-renderer';
 import { PIXEL_ICONS } from '@/components/ui/PixelIcon';
 import type { StarSystem, Fleet } from '@/types/game';
+
+// 1-px deterministic pseudo-random per seed (for stable explosion jitter)
+function hashf(n: number): number {
+  const x = Math.sin(n * 12.9898) * 43758.5453;
+  return x - Math.floor(x);
+}
 
 function drawPixelIcon(ctx: CanvasRenderingContext2D, id: string, x: number, y: number, color: string, scale = 2) {
   const rows = PIXEL_ICONS[id];
@@ -26,8 +32,12 @@ export default function SystemCanvas() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const animRef   = useRef<number>(0);
   const timeRef   = useRef<number>(0);
+  // Screen-space positions captured each frame so the click handler can hit-test
+  // exactly what's drawn (fleets + orbiting stations).
+  const fleetHitsRef   = useRef<{ id: string; empireId: string; mine: boolean; x: number; y: number }[]>([]);
+  const stationHitsRef = useRef<{ id: string; empireId: string; mine: boolean; x: number; y: number }[]>([]);
 
-  const { currentGame, empires, myEmpire, ui, selectPlanet, setView, selectFleet, moveFleetInSystem } = useGameStore();
+  const { currentGame, empires, myEmpire, ui, selectPlanet, setView, selectFleet, moveFleetInSystem, setFleetTask } = useGameStore();
 
   const system: StarSystem | undefined = currentGame?.galaxy.systems.find(
     s => s.id === ui.selectedSystemId
@@ -209,28 +219,84 @@ export default function SystemCanvas() {
     }
 
     // Stations
+    const stationHits: typeof stationHitsRef.current = [];
     for (const empire of empires) {
-      for (const station of empire.stations) {
+      const isMine = empire.id === myEmpire?.id;
+      for (let si = 0; si < empire.stations.length; si++) {
+        const station = empire.stations[si];
         if (station.systemId !== system.id) continue;
-        const angle = ts * 0.0002 + empire.id.charCodeAt(0) * 0.5;
-        const stR = 80;
+        const cfg = STATION_CONFIG[station.type];
+        const angle = ts * 0.0002 + empire.id.charCodeAt(0) * 0.5 + si * 1.3;
+        const stR = 70 + si * 22;
         const sx2 = cx + Math.cos(angle) * stR;
         const sy2 = cy + Math.sin(angle) * stR;
-        ctx.fillStyle = empire.color;
-        ctx.globalAlpha = 0.9;
+
+        const building = (station.buildCompletedTick ?? 0) > (currentGame?.tick ?? 0);
+        const hp    = station.hp    ?? cfg.hp;
+        const maxHp = station.maxHp ?? cfg.hp;
+        const hpPct = Math.max(0, Math.min(1, hp / maxHp));
+
+        // Glow ring
+        ctx.strokeStyle = empire.color;
+        ctx.globalAlpha = building ? 0.35 : 0.85;
+        ctx.lineWidth = 1.5;
         ctx.beginPath();
-        // Simple station shape: diamond
-        ctx.moveTo(sx2, sy2 - 5);
-        ctx.lineTo(sx2 + 5, sy2);
-        ctx.lineTo(sx2, sy2 + 5);
-        ctx.lineTo(sx2 - 5, sy2);
+        ctx.arc(sx2, sy2, 9, 0, Math.PI * 2);
+        ctx.stroke();
+
+        // Station body: diamond hull with cross arms
+        ctx.fillStyle = empire.color;
+        ctx.globalAlpha = building ? 0.4 : 1;
+        ctx.beginPath();
+        ctx.moveTo(sx2, sy2 - 6);
+        ctx.lineTo(sx2 + 6, sy2);
+        ctx.lineTo(sx2, sy2 + 6);
+        ctx.lineTo(sx2 - 6, sy2);
         ctx.closePath();
         ctx.fill();
+        // Solar arms
+        ctx.fillRect(sx2 - 10, sy2 - 1, 4, 2);
+        ctx.fillRect(sx2 + 6,  sy2 - 1, 4, 2);
+        ctx.fillStyle = '#ffffff';
+        ctx.globalAlpha = building ? 0.4 : 0.9;
+        ctx.fillRect(sx2 - 1, sy2 - 1, 2, 2);
         ctx.globalAlpha = 1;
+
+        // HP bar (only when damaged or hostile-relevant)
+        if (!building && hpPct < 1) {
+          const bw = 22;
+          ctx.fillStyle = '#000000aa';
+          ctx.fillRect(sx2 - bw / 2 - 1, sy2 - 17, bw + 2, 4);
+          ctx.fillStyle = hpPct > 0.5 ? '#44ff88' : hpPct > 0.25 ? '#ffaa00' : '#ff4455';
+          ctx.fillRect(sx2 - bw / 2, sy2 - 16, bw * hpPct, 2);
+        }
+
+        // Type label / building indicator
+        ctx.font = '7px Share Tech Mono';
+        ctx.textAlign = 'center';
+        ctx.fillStyle = isMine ? '#8aa0b0' : '#aa7777';
+        ctx.globalAlpha = 0.8;
+        ctx.fillText(building ? `◐ ${cfg.label}` : cfg.label, sx2, sy2 + 17);
+        ctx.globalAlpha = 1;
+
+        if (!building) stationHits.push({ id: station.id, empireId: empire.id, mine: isMine, x: sx2, y: sy2 });
       }
     }
+    stationHitsRef.current = stationHits;
+
+    // ── Build a quick index of all in-system combat assets (for beam FX) ──
+    const assetPos: { empireId: string; x: number; y: number }[] = [];
+    for (const empire of empires) {
+      for (const fleet of (empire.fleets ?? [])) {
+        if (fleet.systemId === system.id && fleet.state !== 'in_transit') {
+          assetPos.push({ empireId: empire.id, x: fleet.posX * W, y: fleet.posY * H });
+        }
+      }
+    }
+    for (const sh of stationHits) assetPos.push({ empireId: sh.empireId, x: sh.x, y: sh.y });
 
     // Fleets
+    const fleetHits: typeof fleetHitsRef.current = [];
     for (const empire of empires) {
       for (const fleet of (empire.fleets ?? [])) {
         if (fleet.systemId !== system.id) continue;
@@ -240,9 +306,61 @@ export default function SystemCanvas() {
         const fy = fleet.posY * H;
         const isMine = empire.id === myEmpire?.id;
         const isSelected = fleet.id === ui.selectedFleetId;
+        fleetHits.push({ id: fleet.id, empireId: empire.id, mine: isMine, x: fx, y: fy });
 
-        // Empire color ring
-        ctx.strokeStyle = empire.color;
+        // Fleet HP (sum of member ships)
+        const fShips = empire.ships.filter(s => fleet.shipIds.includes(s.id));
+        const fhp    = fShips.reduce((a, s) => a + s.hp, 0);
+        const fmaxhp = fShips.reduce((a, s) => a + s.maxHp, 0) || 1;
+        const hpPct  = Math.max(0, Math.min(1, fhp / fmaxhp));
+
+        // ── Combat FX: animated weapon beams + muzzle flashes while fighting ──
+        if (fleet.state === 'fighting') {
+          const enemies = assetPos.filter(a => a.empireId !== empire.id);
+          // nearest enemy asset
+          let near: { x: number; y: number } | null = null;
+          let nd = Infinity;
+          for (const en of enemies) {
+            const d = (en.x - fx) ** 2 + (en.y - fy) ** 2;
+            if (d < nd) { nd = d; near = en; }
+          }
+          if (near) {
+            const beat = (ts * 0.012) + fx * 0.05;
+            const fire = (Math.sin(beat) + 1) / 2; // 0..1 pulse
+            // Beam
+            ctx.strokeStyle = empire.color;
+            ctx.lineWidth = 1 + fire * 1.5;
+            ctx.globalAlpha = 0.25 + fire * 0.55;
+            ctx.beginPath();
+            ctx.moveTo(fx, fy);
+            // jitter the endpoint slightly for a "barrage" feel
+            const jx = near.x + (hashf(Math.floor(ts * 0.02) + fx) - 0.5) * 10;
+            const jy = near.y + (hashf(Math.floor(ts * 0.02) + fy) - 0.5) * 10;
+            ctx.lineTo(jx, jy);
+            ctx.stroke();
+            // Muzzle flash at source
+            ctx.fillStyle = '#ffffff';
+            ctx.globalAlpha = fire * 0.8;
+            ctx.fillRect(fx - 1, fy - 1, 2, 2);
+            // Impact explosion at target
+            if (fire > 0.7) {
+              const er = 2 + (fire - 0.7) * 14;
+              const g = ctx.createRadialGradient(jx, jy, 0, jx, jy, er);
+              g.addColorStop(0, '#ffffff');
+              g.addColorStop(0.4, empire.color);
+              g.addColorStop(1, 'transparent');
+              ctx.fillStyle = g;
+              ctx.globalAlpha = 0.7;
+              ctx.beginPath();
+              ctx.arc(jx, jy, er, 0, Math.PI * 2);
+              ctx.fill();
+            }
+            ctx.globalAlpha = 1;
+          }
+        }
+
+        // Empire color ring (pulses red-tinged when fighting)
+        ctx.strokeStyle = fleet.state === 'fighting' ? '#ff5544' : empire.color;
         ctx.lineWidth = 1.5;
         ctx.globalAlpha = 0.8;
         ctx.beginPath();
@@ -252,6 +370,15 @@ export default function SystemCanvas() {
 
         // Ship sprite
         drawPixelIcon(ctx, 'fleet_ship', fx, fy, empire.color, 2);
+
+        // Fleet HP bar
+        if (hpPct < 1) {
+          const bw = 24;
+          ctx.fillStyle = '#000000aa';
+          ctx.fillRect(fx - bw / 2 - 1, fy + 13, bw + 2, 4);
+          ctx.fillStyle = hpPct > 0.5 ? '#44ff88' : hpPct > 0.25 ? '#ffaa00' : '#ff4455';
+          ctx.fillRect(fx - bw / 2, fy + 14, bw * hpPct, 2);
+        }
 
         // Selection brackets
         if (isSelected) {
@@ -308,6 +435,7 @@ export default function SystemCanvas() {
         }
       }
     }
+    fleetHitsRef.current = fleetHits;
 
     animRef.current = requestAnimationFrame(draw);
   }, [system, empires, myEmpire, ui.selectedPlanetId, ui.selectedFleetId, currentGame]);
@@ -341,23 +469,38 @@ export default function SystemCanvas() {
     const orbitScale = Math.min(cx, cy) * 0.85 / maxOrbit;
     const now = performance.now();
 
-    // 1) Try fleet click first
-    for (const empire of empires) {
-      for (const fleet of (empire.fleets ?? [])) {
-        if (fleet.systemId !== system.id) continue;
-        if (fleet.state === 'in_transit') continue;
-        const fx = fleet.posX * W;
-        const fy = fleet.posY * H;
-        const dx = mx - fx;
-        const dy = my - fy;
-        if (Math.sqrt(dx * dx + dy * dy) < 14) {
-          selectFleet(fleet.id);
-          return;
-        }
+    const within = (x: number, y: number, r: number) => (mx - x) ** 2 + (my - y) ** 2 < r * r;
+
+    // Is one of my fleets currently selected & present here? (enables attack/move orders)
+    const selFleet = myEmpire?.fleets?.find(f => f.id === ui.selectedFleetId && f.systemId === system.id);
+
+    // Hit-test using the exact screen positions captured during draw
+    const hitFleet   = fleetHitsRef.current.find(h => within(h.x, h.y, 14));
+    const hitStation = stationHitsRef.current.find(h => within(h.x, h.y, 12));
+
+    // 1) With a fleet selected, clicking an ENEMY asset issues an attack order
+    if (selFleet) {
+      if (hitFleet && !hitFleet.mine) {
+        setFleetTask(selFleet.id, {
+          type: 'attack_fleet',
+          targetFleetId: hitFleet.id,
+          targetEmpireId: hitFleet.empireId,
+        });
+        return;
+      }
+      if (hitStation && !hitStation.mine) {
+        setFleetTask(selFleet.id, {
+          type: 'attack_station',
+          targetEmpireId: hitStation.empireId,
+        });
+        return;
       }
     }
 
-    // 2) Planet click
+    // 2) Clicking any fleet selects it
+    if (hitFleet) { selectFleet(hitFleet.id); return; }
+
+    // 3) Planet click
     for (let i = 0; i < system.planets.length; i++) {
       const planet = system.planets[i];
       const orbitR = (i + 1.5) * orbitScale;
@@ -366,21 +509,12 @@ export default function SystemCanvas() {
       const px = cx + Math.cos(angle) * orbitR;
       const py = cy + Math.sin(angle) * orbitR;
       const planetR = Math.max(5, 5 + planet.size * 2.5);
-
-      const dx = mx - px;
-      const dy = my - py;
-      if (Math.sqrt(dx * dx + dy * dy) < planetR + 8) {
-        selectPlanet(planet.id);
-        return;
-      }
+      if (within(px, py, planetR + 8)) { selectPlanet(planet.id); return; }
     }
 
-    // 3) If a fleet is selected and it's mine, move it
-    const selFleet = myEmpire?.fleets?.find(f => f.id === ui.selectedFleetId && f.systemId === system.id);
+    // 4) If a fleet is selected and it's mine, move it to the clicked point
     if (selFleet) {
-      const nx = mx / W;
-      const ny = my / H;
-      moveFleetInSystem(selFleet.id, nx, ny);
+      moveFleetInSystem(selFleet.id, mx / W, my / H);
       return;
     }
 
@@ -411,15 +545,27 @@ export default function SystemCanvas() {
       {selFleet && (
         <div className="absolute top-12 left-3 pixel-panel p-2 text-[9px] font-mono w-52 flex flex-col gap-1" style={{ borderColor: '#44aaff' }}>
           <div className="font-pixel text-[9px] text-accent-cyan">{selFleet.name}</div>
-          <div className="text-[#8aa0b0]">{selFleet.shipIds.length} ship(s) · {selFleet.state}</div>
+          <div className="text-[#8aa0b0]">
+            {selFleet.shipIds.length} ship(s) ·{' '}
+            <span style={{ color: selFleet.state === 'fighting' ? '#ff5544' : '#8aa0b0' }}>{selFleet.state}</span>
+          </div>
           {selFleet.task && (
-            <div className="text-[#aaaaff]">Task: {selFleet.task.type}</div>
+            <div className="text-[#ff8866]">⚔ {selFleet.task.type.replace('_', ' ')}</div>
           )}
-          <div className="text-[#3a5a6a] text-[8px]">Click anywhere to move here</div>
-          <button
-            onClick={() => selectFleet(null)}
-            className="btn-gray text-[8px] py-0.5"
-          >DESELECT</button>
+          <div className="text-[#3a5a6a] text-[8px]">Click empty space to move</div>
+          <div className="text-[#3a5a6a] text-[8px]">Click an enemy ship/station to attack</div>
+          <div className="flex gap-1">
+            {selFleet.task && (
+              <button
+                onClick={() => setFleetTask(selFleet.id, null)}
+                className="btn-gray text-[8px] py-0.5 flex-1"
+              >STAND DOWN</button>
+            )}
+            <button
+              onClick={() => selectFleet(null)}
+              className="btn-gray text-[8px] py-0.5 flex-1"
+            >DESELECT</button>
+          </div>
         </div>
       )}
     </div>
