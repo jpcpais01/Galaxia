@@ -11,6 +11,7 @@ import ShipDesigner from './ShipDesigner';
 import AssemblyPanel from './AssemblyPanel';
 import ColoniesPanel from './ColoniesPanel';
 import FleetPanel from './FleetPanel';
+import MusicPlayer from './MusicPlayer';
 
 import { useRouter } from 'next/navigation';
 
@@ -206,6 +207,7 @@ export default function HUD({ children }: { children: React.ReactNode }) {
         <div className="flex-1 relative overflow-hidden">
           {children}
           <CombatAlert />
+          <MusicPlayer />
         </div>
 
         {/* Right sidebar */}
