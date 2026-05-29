@@ -171,7 +171,7 @@ function CombatAlert() {
   if (!recent) return null;
   return (
     <div
-      className="absolute top-3 right-3 z-30 pixel-panel px-3 py-1.5 text-[9px] font-mono max-w-xs animate-pulse"
+      className="absolute top-12 right-2 z-20 pixel-panel px-3 py-1.5 text-[9px] font-mono max-w-xs animate-pulse"
       style={{ borderColor: '#ff4455', background: '#1a0808ee' }}
     >
       <span className="font-pixel text-[8px] text-[#ff4455]">⚠ UNDER ATTACK</span>

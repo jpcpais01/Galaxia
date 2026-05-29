@@ -10,7 +10,8 @@ const TRACKS = [
 ];
 
 export default function MusicPlayer() {
-  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const audioRef     = useRef<HTMLAudioElement | null>(null);
+  const userPaused   = useRef(false); // true only when the player explicitly pauses
   const [idx, setIdx]         = useState(0);
   const [playing, setPlaying] = useState(false);
   const [vol, setVol]         = useState(0.5);
@@ -33,10 +34,28 @@ export default function MusicPlayer() {
     a.play().then(() => setPlaying(true)).catch(() => setPlaying(false));
   }, [vol]);
 
+  // Start the soundtrack as soon as the player enters the game. Browsers block
+  // autoplay-with-sound until a gesture, so also kick off on the first
+  // interaction anywhere (unless the player has explicitly paused).
+  useEffect(() => {
+    playCurrent();
+    const kick = () => {
+      const a = audioRef.current;
+      if (a && a.paused && !userPaused.current) playCurrent();
+    };
+    window.addEventListener('pointerdown', kick);
+    window.addEventListener('keydown', kick);
+    return () => {
+      window.removeEventListener('pointerdown', kick);
+      window.removeEventListener('keydown', kick);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const goTo = (i: number) => {
+    userPaused.current = false;
     setIdx(i);
-    // src updates on re-render; play on the next tick
-    setTimeout(playCurrent, 0);
+    setTimeout(playCurrent, 0); // src updates on re-render; play next tick
   };
   const next = useCallback(() => goTo((idx + 1) % TRACKS.length), [idx]);
   const prev = () => goTo((idx - 1 + TRACKS.length) % TRACKS.length);
@@ -44,49 +63,45 @@ export default function MusicPlayer() {
   const toggle = () => {
     const a = audioRef.current;
     if (!a) return;
-    if (playing) { a.pause(); setPlaying(false); }
-    else playCurrent();
+    if (playing) { a.pause(); setPlaying(false); userPaused.current = true; }
+    else { userPaused.current = false; playCurrent(); }
   };
 
   const track = TRACKS[idx];
 
   return (
-    <div className="absolute bottom-3 left-3 z-30 font-mono select-none">
-      <audio ref={audioRef} src={track.file} onEnded={next} preload="none" />
+    <div className="absolute top-2 right-2 z-30 font-mono select-none flex flex-col items-end gap-1">
+      <audio ref={audioRef} src={track.file} onEnded={next} preload="auto" />
 
-      {open ? (
-        <div className="pixel-panel p-2 w-52 flex flex-col gap-2" style={{ borderColor: '#2a3a6a' }}>
-          <div className="flex items-center justify-between">
-            <span className="font-pixel text-[8px] text-accent-cyan">♪ SOUNDTRACK</span>
-            <button onClick={() => setOpen(false)} className="text-[#3a5a6a] hover:text-[#6a8aa0] text-[10px]">▾</button>
-          </div>
+      {/* Always-visible compact transport bar */}
+      <div className="pixel-panel flex items-center gap-1 px-1.5 py-1" style={{ borderColor: '#2a3a6a' }}>
+        <span className={`text-accent-cyan text-[9px] ${playing ? 'animate-pulse' : ''}`}>♪</span>
+        <span className="text-[#8aa8d0] text-[8px] w-24 truncate" title={track.title}>{track.title}</span>
+        <button onClick={prev}   title="Previous" className="btn-gray text-[9px] px-1.5 py-0.5">⏮</button>
+        <button onClick={toggle} title={playing ? 'Pause' : 'Play'} className="btn-cyan text-[9px] px-2 py-0.5">{playing ? '⏸' : '►'}</button>
+        <button onClick={next}   title="Next" className="btn-gray text-[9px] px-1.5 py-0.5">⏭</button>
+        <button onClick={() => setOpen(o => !o)} title="Tracklist" className="text-[#3a5a6a] hover:text-[#6a8aa0] text-[10px] px-1">{open ? '▴' : '▾'}</button>
+      </div>
 
-          {/* Track list */}
+      {/* Expandable track list + volume */}
+      {open && (
+        <div className="pixel-panel p-2 w-48 flex flex-col gap-2" style={{ borderColor: '#2a3a6a' }}>
           <div className="flex flex-col gap-0.5">
             {TRACKS.map((t, i) => (
               <button
                 key={t.file}
                 onClick={() => goTo(i)}
-                className="flex items-center justify-between px-1.5 py-1 text-[8px] border text-left"
+                className="flex items-center px-1.5 py-1 text-[8px] border text-left"
                 style={{
                   borderColor: i === idx ? '#3a6aff' : '#12182a',
                   background:  i === idx ? '#0a1430' : 'transparent',
                   color:       i === idx ? '#9ab8ff' : '#5a7a8a',
                 }}
               >
-                <span>{i === idx && playing ? '► ' : ''}{t.title}</span>
+                {i === idx && playing ? '► ' : ''}{t.title}
               </button>
             ))}
           </div>
-
-          {/* Transport */}
-          <div className="flex items-center gap-1">
-            <button onClick={prev} className="btn-gray text-[9px] px-2 py-0.5">⏮</button>
-            <button onClick={toggle} className="btn-cyan text-[9px] px-3 py-0.5 flex-1">{playing ? '⏸ PAUSE' : '► PLAY'}</button>
-            <button onClick={next} className="btn-gray text-[9px] px-2 py-0.5">⏭</button>
-          </div>
-
-          {/* Volume */}
           <div className="flex items-center gap-2">
             <span className="text-[8px] text-[#3a5a6a]">VOL</span>
             <input
@@ -96,15 +111,6 @@ export default function MusicPlayer() {
             />
           </div>
         </div>
-      ) : (
-        <button
-          onClick={() => setOpen(true)}
-          className="pixel-panel px-2 py-1 flex items-center gap-2 text-[8px]"
-          style={{ borderColor: '#2a3a6a' }}
-        >
-          <span className={`text-accent-cyan ${playing ? 'animate-pulse' : ''}`}>♪</span>
-          <span className="text-[#7a9ab8]">{playing ? track.title : 'MUSIC'}</span>
-        </button>
       )}
     </div>
   );
