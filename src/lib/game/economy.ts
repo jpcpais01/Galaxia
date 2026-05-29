@@ -117,18 +117,20 @@ function applyCivProductionBonuses(empire: Empire, rates: Resources): void {
 // ─── Main computation ──────────────────────────────────────────────────────────
 
 export function computeResourceRates(empire: Empire, currentTick = 0): Resources {
+  // Baseline homeworld output (small, so buildings matter)
   const rates: Resources = {
-    energy: 5,
+    energy: 4,
     food: 0,
-    minerals: 0,
-    research: 5,
+    minerals: 3,
+    research: 4,
     compute: 0,
-    credits: 10,
+    credits: 8,
     population: 0,
   };
 
   const resourceBonuses = getResearchBonuses(empire, 'resource_rate');
 
+  let energyUpkeep = 0;
   for (const infra of empire.infrastructure) {
     if (!infra.active) continue;
     const cfg = INFRA_CONFIG[infra.type];
@@ -137,7 +139,10 @@ export function computeResourceRates(empire: Empire, currentTick = 0): Resources
       const bonus = 1 + (resourceBonuses[key] ?? 0) / 100;
       rates[key] = (rates[key] || 0) + val * bonus;
     }
+    energyUpkeep += cfg.upkeep ?? 0;
   }
+  // Ground colony buildings draw from the planetary power grid
+  rates.energy -= energyUpkeep;
 
   // Active resource operations
   for (const op of (empire.groundOps ?? [])) {
@@ -172,9 +177,13 @@ export function computeResourceRates(empire: Empire, currentTick = 0): Resources
     }
   }
 
-  // Population growth: each fed colony grows organically (scaled by bio research)
+  // Population growth: fed colonies grow toward a housing cap. Growth needs food
+  // in the bank (famine, below, shrinks population) and free housing.
   const colonies = empire.colonizedPlanets.length;
-  if (colonies > 0) {
+  const colonyHubs = empire.infrastructure.filter(i => i.active && i.type === 'colony_hub').length;
+  const housingCap = colonies > 0 ? 30 + colonies * 30 + colonyHubs * 120 : 0;
+  const popNow = empire.resources.population;
+  if (colonies > 0 && popNow < housingCap && empire.resources.food > 0) {
     const popBonus = 1 + (resourceBonuses['population'] ?? 0) / 100;
     rates.population += colonies * popBonus;
   }
@@ -194,15 +203,23 @@ export function computeResourceRates(empire: Empire, currentTick = 0): Resources
   const hungerMult  = empire.civilization?.traits?.includes('hungry') ? 1.5 : 1;
 
   if (!isSynthetic) {
-    rates.food -= Math.ceil(pop * 0.5 * hungerMult);
+    rates.food -= Math.ceil(pop * 0.4 * hungerMult);
   }
-  rates.energy   -= Math.ceil(pop * 0.2);
-  rates.credits  += Math.floor(pop * 0.5);
-  rates.research += Math.floor(pop / 3);
+  rates.energy   -= Math.ceil(pop * 0.12);   // citizens draw a little power too
+  rates.credits  += Math.floor(pop * 0.5);   // taxes
+  rates.research += Math.floor(pop * 0.3);   // educated workforce
 
   // Fleet upkeep: each warship costs credits to maintain
   const shipCount = empire.ships?.length ?? 0;
-  if (shipCount > 0) rates.credits -= shipCount;
+  if (shipCount > 0) rates.credits -= shipCount * 2;
+
+  // ── Brownout: a depleted power grid in deficit throttles production ────────
+  // (energy producers keep running, so building more solar/fusion recovers it)
+  if (empire.resources.energy <= 0 && rates.energy < 0) {
+    for (const k of ['minerals', 'research', 'credits', 'compute'] as (keyof Resources)[]) {
+      if (rates[k] > 0) rates[k] = Math.round(rates[k] * 0.6);
+    }
+  }
 
   return rates;
 }
@@ -249,7 +266,7 @@ export function applyTick(empire: Empire, currentTick: number): Partial<Empire> 
   let hubBonus = 0;
   for (const infra of empire.infrastructure) {
     if (infra.type === 'colony_hub' && !infra.active && infra.buildCompletedTick <= currentTick) {
-      hubBonus += 10;
+      hubBonus += 12;
     }
   }
   if (hubBonus > 0) {
@@ -308,7 +325,8 @@ export function applyTick(empire: Empire, currentTick: number): Partial<Empire> 
   if (researchQueue) {
     const node = RESEARCH_BY_ID[researchQueue];
     if (node) {
-      const pointsPerTick = rates.research;
+      // Compute (from AI datacenters / AI techs) accelerates research throughput.
+      const pointsPerTick = rates.research + Math.max(0, rates.compute);
       researchProgress += pointsPerTick;
       if (researchProgress >= node.costResearch) {
         completedResearch = [...completedResearch, researchQueue];

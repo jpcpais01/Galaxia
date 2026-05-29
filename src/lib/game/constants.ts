@@ -9,13 +9,13 @@ export const MIN_SYSTEM_DISTANCE = 240;
 export const CONNECTION_MAX_DISTANCE = 700;
 
 export const STARTING_RESOURCES: Resources = {
-  energy: 80,
-  food: 80,
-  minerals: 250,
+  energy: 60,    // enough to power a starter base while you build solar
+  food: 100,     // ~20 ticks of buffer to get a hydroponic farm running
+  minerals: 280, // ~3-4 core buildings of seed capital
   research: 0,
   compute: 0,
-  credits: 500,
-  population: 10,
+  credits: 350,  // a couple of builds + one colonization or anomaly probe
+  population: 8,
 };
 
 export const PLANET_CONFIG: Record<PlanetType, {
@@ -67,21 +67,25 @@ export const INFRA_CONFIG: Record<InfraType, {
   slots: number;
   buildTicks: number;
   mineralCost: number;
-  energyCost: number;
+  energyCost: number;   // one-time energy spent to construct
   creditCost: number;
   output: Partial<Resources>;
+  upkeep: number;       // ongoing energy drawn from the power grid while active
   icon: string;
 }> = {
-  solar_farm:      { label: 'Solar Farm',      slots: 1, buildTicks: 6,  mineralCost: 50,  energyCost: 0,  creditCost: 20,  output: { energy: 12 },      icon: 'solar_farm' },
-  fusion_plant:    { label: 'Fusion Plant',    slots: 2, buildTicks: 20, mineralCost: 200, energyCost: 0,  creditCost: 100, output: { energy: 40 },      icon: 'fusion_plant' },
-  hydroponic_farm: { label: 'Hydro Farm',      slots: 1, buildTicks: 8,  mineralCost: 40,  energyCost: 10, creditCost: 30,  output: { food: 12 },        icon: 'hydroponic_farm' },
-  mining_complex:  { label: 'Mining Complex',  slots: 2, buildTicks: 12, mineralCost: 60,  energyCost: 15, creditCost: 50,  output: { minerals: 18 },    icon: 'mining_complex' },
-  research_lab:    { label: 'Research Lab',    slots: 1, buildTicks: 15, mineralCost: 100, energyCost: 20, creditCost: 80,  output: { research: 12 },    icon: 'research_lab' },
-  ai_datacenter:   { label: 'AI Datacenter',   slots: 3, buildTicks: 30, mineralCost: 300, energyCost: 50, creditCost: 200, output: { compute: 25 },     icon: 'ai_datacenter' },
-  trade_hub:       { label: 'Trade Hub',       slots: 1, buildTicks: 10, mineralCost: 80,  energyCost: 10, creditCost: 60,  output: { credits: 24 },     icon: 'trade_hub' },
-  colony_hub:      { label: 'Colony Hub',      slots: 2, buildTicks: 20, mineralCost: 150, energyCost: 20, creditCost: 100, output: { population: 2 },   icon: 'colony_hub' },
-  defense_battery: { label: 'Defense Battery', slots: 2, buildTicks: 25, mineralCost: 200, energyCost: 30, creditCost: 150, output: {},                  icon: 'defense_battery' },
-  shipyard:        { label: 'Shipyard',        slots: 4, buildTicks: 50, mineralCost: 500, energyCost: 80, creditCost: 300, output: {},                  icon: 'shipyard' },
+  // Power producers (no upkeep — they feed the grid)
+  solar_farm:      { label: 'Solar Farm',      slots: 1, buildTicks: 6,  mineralCost: 40,  energyCost: 0,  creditCost: 15,  output: { energy: 12 },     upkeep: 0,  icon: 'solar_farm' },
+  fusion_plant:    { label: 'Fusion Plant',    slots: 2, buildTicks: 22, mineralCost: 220, energyCost: 0,  creditCost: 120, output: { energy: 48 },     upkeep: 0,  icon: 'fusion_plant' },
+  // Economy (draw power)
+  hydroponic_farm: { label: 'Hydro Farm',      slots: 1, buildTicks: 8,  mineralCost: 45,  energyCost: 0,  creditCost: 25,  output: { food: 14 },       upkeep: 2,  icon: 'hydroponic_farm' },
+  mining_complex:  { label: 'Mining Complex',  slots: 2, buildTicks: 12, mineralCost: 70,  energyCost: 10, creditCost: 45,  output: { minerals: 14 },   upkeep: 3,  icon: 'mining_complex' },
+  research_lab:    { label: 'Research Lab',    slots: 1, buildTicks: 14, mineralCost: 90,  energyCost: 15, creditCost: 70,  output: { research: 10 },   upkeep: 4,  icon: 'research_lab' },
+  ai_datacenter:   { label: 'AI Datacenter',   slots: 3, buildTicks: 28, mineralCost: 240, energyCost: 60, creditCost: 180, output: { compute: 12 },    upkeep: 10, icon: 'ai_datacenter' },
+  trade_hub:       { label: 'Trade Hub',       slots: 1, buildTicks: 10, mineralCost: 70,  energyCost: 0,  creditCost: 50,  output: { credits: 16 },    upkeep: 2,  icon: 'trade_hub' },
+  // Colony hub: no per-tick output — it raises population housing capacity (see economy.ts)
+  colony_hub:      { label: 'Colony Hub',      slots: 2, buildTicks: 20, mineralCost: 150, energyCost: 20, creditCost: 120, output: {},                 upkeep: 5,  icon: 'colony_hub' },
+  defense_battery: { label: 'Defense Battery', slots: 2, buildTicks: 25, mineralCost: 200, energyCost: 30, creditCost: 150, output: {},                 upkeep: 4,  icon: 'defense_battery' },
+  shipyard:        { label: 'Shipyard',        slots: 4, buildTicks: 45, mineralCost: 450, energyCost: 80, creditCost: 280, output: {},                 upkeep: 8,  icon: 'shipyard' },
 };
 
 export const STATION_CONFIG: Record<StationType, {
@@ -95,11 +99,11 @@ export const STATION_CONFIG: Record<StationType, {
   attack: number;   // damage dealt to hostile fleets per combat round
   defense: number;  // mitigates incoming damage
 }> = {
-  space_station:    { label: 'Space Station',    buildTicks: 50,  mineralCost: 300,  energyCost: 0,   creditCost: 200, icon: '🛰', hp: 500,  attack: 15, defense: 20 },
-  mining_station:   { label: 'Mining Station',   buildTicks: 20,  mineralCost: 200,  energyCost: 0,   creditCost: 100, icon: '⛏', hp: 300,  attack: 0,  defense: 10 },
-  military_outpost: { label: 'Military Outpost', buildTicks: 40,  mineralCost: 400,  energyCost: 40,  creditCost: 250, icon: '🔫', hp: 800,  attack: 40, defense: 30 },
-  research_station: { label: 'Research Station', buildTicks: 35,  mineralCost: 350,  energyCost: 30,  creditCost: 200, icon: '🔭', hp: 400,  attack: 0,  defense: 10 },
-  stargate:         { label: 'Stargate',         buildTicks: 100, mineralCost: 1000, energyCost: 200, creditCost: 800, icon: '🌀', hp: 1200, attack: 0,  defense: 40 },
+  space_station:    { label: 'Space Station',    buildTicks: 45, mineralCost: 250, energyCost: 0,   creditCost: 150, icon: '🛰', hp: 500,  attack: 15, defense: 20 },
+  mining_station:   { label: 'Mining Station',   buildTicks: 18, mineralCost: 180, energyCost: 0,   creditCost: 90,  icon: '⛏', hp: 300,  attack: 0,  defense: 10 },
+  military_outpost: { label: 'Military Outpost', buildTicks: 38, mineralCost: 380, energyCost: 40,  creditCost: 240, icon: '🔫', hp: 800,  attack: 40, defense: 30 },
+  research_station: { label: 'Research Station', buildTicks: 30, mineralCost: 300, energyCost: 30,  creditCost: 180, icon: '🔭', hp: 400,  attack: 0,  defense: 10 },
+  stargate:         { label: 'Stargate',         buildTicks: 90, mineralCost: 900, energyCost: 200, creditCost: 700, icon: '🌀', hp: 1200, attack: 0,  defense: 40 },
 };
 
 export const GROUND_OP_CONFIG: Record<GroundOpType, {
@@ -112,10 +116,10 @@ export const GROUND_OP_CONFIG: Record<GroundOpType, {
   icon: string;
   description: string;
 }> = {
-  mineral_extractor:     { label: 'Mineral Extractor',  buildTicks: 10, mineralCost: 40,  energyCost: 5,  creditCost: 20, output: { minerals: 8 },           icon: 'mineral_extractor',     description: 'Extracts mineral deposits without colonization' },
-  atmospheric_processor: { label: 'Atmo Processor',     buildTicks: 15, mineralCost: 60,  energyCost: 10, creditCost: 35, output: { energy: 8, credits: 4 }, icon: 'atmospheric_processor', description: 'Harvests atmospheric gases for energy and trade' },
-  deep_scanner:          { label: 'Deep Scanner',       buildTicks: 8,  mineralCost: 50,  energyCost: 8,  creditCost: 30, output: { research: 6 },            icon: 'deep_scanner',          description: 'Scans the planetary core for research data' },
-  solar_collector:       { label: 'Solar Collector',    buildTicks: 12, mineralCost: 60,  energyCost: 0,  creditCost: 40, output: { energy: 12 },            icon: 'solar_collector',       description: 'Orbital array harvesting direct stellar radiation' },
+  mineral_extractor:     { label: 'Mineral Extractor',  buildTicks: 10, mineralCost: 45,  energyCost: 5,  creditCost: 25, output: { minerals: 10 },          icon: 'mineral_extractor',     description: 'Extracts mineral deposits without colonization' },
+  atmospheric_processor: { label: 'Atmo Processor',     buildTicks: 15, mineralCost: 60,  energyCost: 10, creditCost: 35, output: { energy: 10, credits: 5 },icon: 'atmospheric_processor', description: 'Harvests atmospheric gases for energy and trade' },
+  deep_scanner:          { label: 'Deep Scanner',       buildTicks: 8,  mineralCost: 55,  energyCost: 8,  creditCost: 30, output: { research: 7 },            icon: 'deep_scanner',          description: 'Scans the planetary core for research data' },
+  solar_collector:       { label: 'Solar Collector',    buildTicks: 12, mineralCost: 60,  energyCost: 0,  creditCost: 40, output: { energy: 14 },            icon: 'solar_collector',       description: 'Orbital array harvesting direct stellar radiation' },
 };
 
 export const EMPIRE_COLORS = [

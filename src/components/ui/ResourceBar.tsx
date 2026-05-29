@@ -17,7 +17,7 @@ const RESOURCES = [
 ] as const;
 
 const BASE: Partial<Record<keyof Resources, number>> = {
-  energy: 5, research: 5, credits: 10,
+  energy: 4, minerals: 3, research: 4, credits: 8,
 };
 
 function fmt(n: number): string {
@@ -56,6 +56,8 @@ export default function ResourceBar() {
       const cfg = INFRA_CONFIG[infra.type];
       const val = (cfg.output as Partial<Resources>)[key];
       if (val) items.push({ label: cfg.label, value: val });
+      // Buildings draw from the power grid
+      if (key === 'energy' && cfg.upkeep > 0) items.push({ label: `${cfg.label} upkeep`, value: -cfg.upkeep });
     }
 
     for (const op of (myEmpire!.groundOps ?? [])) {
@@ -68,16 +70,32 @@ export default function ResourceBar() {
     for (const stn of myEmpire!.stations) {
       if (stn.buildCompletedTick > tick) continue;
       if (key === 'minerals' && stn.type === 'mining_station')
-        items.push({ label: 'Mining Station', value: 10 });
+        items.push({ label: 'Mining Station', value: 12 });
       if (key === 'research' && stn.type === 'research_station')
         items.push({ label: 'Research Station', value: 8 });
     }
 
     const pop = myEmpire!.resources.population;
-    if (key === 'food'    && pop > 0) items.push({ label: 'Pop consumption', value: -Math.ceil(pop * 0.5) });
-    if (key === 'energy'  && pop > 0) items.push({ label: 'Pop consumption', value: -Math.ceil(pop * 0.2) });
-    if (key === 'credits' && pop > 0) items.push({ label: 'Population',      value:  Math.floor(pop * 0.5) });
-    if (key === 'research'&& pop > 0) items.push({ label: 'Population',      value:  Math.floor(pop / 3) });
+    if (key === 'food'    && pop > 0) items.push({ label: 'Pop consumption', value: -Math.ceil(pop * 0.4) });
+    if (key === 'energy'  && pop > 0) items.push({ label: 'Pop consumption', value: -Math.ceil(pop * 0.12) });
+    if (key === 'credits' && pop > 0) items.push({ label: 'Taxes (pop)',     value:  Math.floor(pop * 0.5) });
+    if (key === 'research'&& pop > 0) items.push({ label: 'Workforce (pop)', value:  Math.floor(pop * 0.3) });
+
+    // Population growth (fed colonies, under housing cap)
+    const colonies = myEmpire!.colonizedPlanets.length;
+    if (key === 'population' && colonies > 0) items.push({ label: 'Colony growth', value: colonies });
+
+    // Trade routes
+    if (key === 'credits') {
+      const tp = (myEmpire!.diplomacy ?? []).filter(d => d.status === 'trade_partner').length;
+      if (tp > 0) items.push({ label: 'Trade routes', value: tp * 15 });
+    }
+
+    // Fleet upkeep
+    if (key === 'credits') {
+      const ships = myEmpire!.ships?.length ?? 0;
+      if (ships > 0) items.push({ label: 'Fleet upkeep', value: -ships * 2 });
+    }
 
     return items;
   }

@@ -49,7 +49,7 @@ export default function ColoniesPanel() {
       }
     }
   }
-  const canAffordCol = (myEmpire.resources.credits ?? 0) >= 150;
+  const canAffordCol = (myEmpire.resources.credits ?? 0) >= 120 && (myEmpire.resources.minerals ?? 0) >= 80;
 
   const goToPlanet = (systemId: string, planetId: string) => {
     selectSystem(systemId);
@@ -195,7 +195,7 @@ export default function ColoniesPanel() {
                         borderColor: canAffordCol ? '#3a3010' : '#1a1a0a',
                       }}
                     >
-                      150c
+                      80m·120c
                     </span>
                   </button>
                 );

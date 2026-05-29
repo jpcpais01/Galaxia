@@ -116,7 +116,13 @@ export default function BuildMenu() {
                   </div>
                 )}
                 {outputEntries.length === 0 && (
-                  <div className="font-mono text-[8px] text-[#2a4a5a] mb-1">Defensive structure</div>
+                  <div className="font-mono text-[8px] text-[#2a4a5a] mb-1">
+                    {type === 'colony_hub' ? 'Raises population housing' :
+                     type === 'shipyard' ? 'Enables ship construction' : 'Defensive structure'}
+                  </div>
+                )}
+                {cfg.upkeep > 0 && (
+                  <div className="font-mono text-[8px] text-[#aa8844] mb-1">⚡ −{cfg.upkeep} energy/t upkeep</div>
                 )}
 
                 {/* Costs */}

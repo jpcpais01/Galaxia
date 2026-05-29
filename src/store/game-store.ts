@@ -412,11 +412,15 @@ export const useGameStore = create<GameStore>((set, get) => ({
     );
     if (!hasAdjacentSurveyed) return;
 
+    // Survey costs a small amount of credits (fuel/logistics) and takes 18 ticks
+    if (myEmpire.resources.credits < 30) return;
+
     const pendingSurvey: PendingSurvey = {
       systemId,
-      completesAtTick: currentGame.tick + 20,
+      completesAtTick: currentGame.tick + 18,
     };
     await updateDoc(doc(db, 'games', currentGame.id, 'empires', myEmpire.id), {
+      resources: { ...myEmpire.resources, credits: myEmpire.resources.credits - 30 },
       pendingSurveys: [...(myEmpire.pendingSurveys ?? []), pendingSurvey],
     });
 
@@ -477,17 +481,22 @@ export const useGameStore = create<GameStore>((set, get) => ({
     if (!myEmpire.controlledSystems.includes(systemId)) return;
     if (myEmpire.colonizedPlanets.includes(planetId)) return;
     if ((myEmpire.pendingColonizations ?? []).some(c => c.planetId === planetId)) return;
-    if (myEmpire.resources.credits < 150) return;
+    // Colony ships cost minerals (hull) + credits, and take 30 ticks to arrive
+    if (myEmpire.resources.credits < 120 || myEmpire.resources.minerals < 80) return;
 
     const planet = currentGame.galaxy.systems
       .find(s => s.id === systemId)?.planets
       .find(p => p.id === planetId);
     if (!planet?.colonizable) return;
 
-    const newResources = { ...myEmpire.resources, credits: myEmpire.resources.credits - 150 };
+    const newResources = {
+      ...myEmpire.resources,
+      credits:  myEmpire.resources.credits - 120,
+      minerals: myEmpire.resources.minerals - 80,
+    };
     const pending: PendingColonization = {
       planetId, systemId,
-      completesAtTick: currentGame.tick + 50,
+      completesAtTick: currentGame.tick + 30,
     };
 
     await updateDoc(doc(db, 'games', currentGame.id, 'empires', myEmpire.id), {

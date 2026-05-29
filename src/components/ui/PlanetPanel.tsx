@@ -89,7 +89,7 @@ export default function PlanetPanel() {
   const controlled   = myEmpire?.controlledSystems.includes(ui.selectedSystemId ?? '') ?? false;
   const surveyed     = myEmpire?.surveyedSystems.includes(ui.selectedSystemId ?? '') ?? false;
   const canColonize  = controlled && planet.colonizable && !colonized && !pendingCol;
-  const canAffordCol = (myEmpire?.resources.credits ?? 0) >= 150;
+  const canAffordCol = (myEmpire?.resources.credits ?? 0) >= 120 && (myEmpire?.resources.minerals ?? 0) >= 80;
 
   const usedSlots = countUsedSlots(planet.id, myEmpire?.infrastructure ?? []);
   const myInfra   = (myEmpire?.infrastructure ?? []).filter(i => i.planetId === planet.id);
@@ -204,7 +204,7 @@ export default function PlanetPanel() {
             className="btn-gold w-full py-2 text-[9px] disabled:opacity-40"
           >
             COLONIZE PLANET
-            <span className="block text-[8px] text-[#6a5000]">150 credits • 50 ticks • {planet.infraSlots} build slots</span>
+            <span className="block text-[8px] text-[#6a5000]">80 min · 120 cr • 30 ticks • {planet.infraSlots} build slots</span>
           </button>
         )}
 
