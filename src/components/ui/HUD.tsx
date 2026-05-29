@@ -59,7 +59,7 @@ function TopBar() {
 
       {/* Right: nav buttons */}
       <div className="flex items-center gap-1 flex-shrink-0">
-        {navBtn('colonies',   'COLONY', '#44ffaa')}
+        {navBtn('colonies',   'PLANETS', '#44ffaa')}
         {navBtn('research',   'LAB',    '#8888ff')}
         {navBtn('ships',      'SHIPS',  '#44aaff')}
         {navBtn('fleets',     'FLEET',  '#00ddff')}

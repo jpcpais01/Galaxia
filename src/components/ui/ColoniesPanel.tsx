@@ -34,6 +34,23 @@ export default function ColoniesPanel() {
     bySystem.set(e.system.id, arr);
   }
 
+  // Planets you could still colonize — colonizable, in a system you control,
+  // not already colonized and not already en route.
+  const pendingIds = new Set((myEmpire.pendingColonizations ?? []).map(c => c.planetId));
+  const colonizable: PlanetEntry[] = [];
+  if (galaxy) {
+    for (const sysId of myEmpire.controlledSystems) {
+      const sys = galaxy.systems.find(s => s.id === sysId);
+      if (!sys) continue;
+      for (const p of sys.planets) {
+        if (p.colonizable && !planets.includes(p.id) && !pendingIds.has(p.id)) {
+          colonizable.push({ planet: p, system: sys });
+        }
+      }
+    }
+  }
+  const canAffordCol = (myEmpire.resources.credits ?? 0) >= 150;
+
   const goToPlanet = (systemId: string, planetId: string) => {
     selectSystem(systemId);
     selectPlanet(planetId);
@@ -44,16 +61,20 @@ export default function ColoniesPanel() {
   return (
     <div className="flex flex-col h-full">
       <div className="panel-header flex items-center justify-between">
-        <span>COLONIES — {planets.length}</span>
+        <span>PLANETS — {planets.length} colonized</span>
         <button onClick={() => setPanel('none')} className="text-[#3a5a6a] hover:text-[#6a8aa0]">✕</button>
       </div>
 
       <div className="flex-1 scrollable p-3 flex flex-col gap-4">
-        {entries.length === 0 && (
+        {entries.length === 0 && colonizable.length === 0 && (
           <div className="font-mono text-[10px] text-[#2a3a4a] text-center py-6">
-            No colonies established.<br />
-            <span className="text-[#1a2a3a]">Colonize a planet to see it here.</span>
+            No colonies or colonizable planets.<br />
+            <span className="text-[#1a2a3a]">Claim a system to find worlds to colonize.</span>
           </div>
+        )}
+
+        {entries.length > 0 && (
+          <div className="font-pixel text-[8px] text-[#3a8a6a]">YOUR COLONIES</div>
         )}
 
         {Array.from(bySystem.entries()).map(([sysId, list]) => {
@@ -136,6 +157,52 @@ export default function ColoniesPanel() {
             </div>
           );
         })}
+
+        {/* Available to colonize — colonizable worlds in systems you control */}
+        {colonizable.length > 0 && (
+          <div>
+            <div className="flex items-center gap-2 mb-1.5">
+              <div className="font-pixel text-[8px] text-[#3a6a8a]">AVAILABLE TO COLONIZE</div>
+              <div className="flex-1 h-px bg-[#0a1a2a]" />
+              <div className="font-mono text-[8px] text-[#2a4a5a]">{colonizable.length}</div>
+            </div>
+            <div className="flex flex-col gap-1.5">
+              {colonizable.map(({ planet, system }: PlanetEntry) => {
+                const cfg = PLANET_CONFIG[planet.type as keyof typeof PLANET_CONFIG];
+                return (
+                  <button
+                    key={planet.id}
+                    onClick={() => goToPlanet(system.id, planet.id)}
+                    className="flex items-center gap-2 p-2 bg-[#05050f] border border-[#16263a] hover:border-[#2a4a6a] transition-colors text-left w-full"
+                  >
+                    <div
+                      className="w-4 h-4 rounded-full flex-shrink-0 border"
+                      style={{ background: cfg.groundColor, borderColor: cfg.waterColor }}
+                    />
+                    <div className="flex-1 min-w-0">
+                      <div className="flex justify-between items-center">
+                        <span className="font-mono text-[10px] text-[#c0d0e0] truncate">{planet.name}</span>
+                        <span className="font-pixel text-[7px] text-[#3a6a8a] ml-1 flex-shrink-0">{system.name}</span>
+                      </div>
+                      <div className="font-pixel text-[7px] mt-0.5 text-[#44aa88]">
+                        {cfg.label} · sz {planet.size} · {planet.similarity}% · {planet.infraSlots} slots
+                      </div>
+                    </div>
+                    <span
+                      className="font-pixel text-[7px] px-1.5 py-1 border flex-shrink-0"
+                      style={{
+                        color: canAffordCol ? '#ffd700' : '#5a4a20',
+                        borderColor: canAffordCol ? '#3a3010' : '#1a1a0a',
+                      }}
+                    >
+                      150c
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         {/* Pending colonizations */}
         {(myEmpire.pendingColonizations?.length ?? 0) > 0 && (
