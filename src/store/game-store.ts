@@ -8,13 +8,14 @@ import { db } from '@/lib/firebase';
 import type {
   GameMeta, Empire, GameEvent, UIState, SystemState,
   InfraType, StationType, GroundOpType, Resources,
-  PendingSurvey, PendingColonization, Civilization,
+  PendingSurvey, PendingColonization, PendingInvestigation, AnomalyReport, Civilization,
   Fleet, FleetTask, OrbitalStructureType, OrbitalStructure, Ship,
 } from '@/types/game';
 import { generateGalaxy, findHomeSystem, findPath, systemDistance } from '@/lib/game/galaxy-generator';
 import { createBotEmpire, runBotTurn } from '@/lib/game/bot-ai';
 import { applyTick, canAfford, deductCosts, countUsedSlots } from '@/lib/game/economy';
-import { resolveAnomalies, resolveAssembly, checkVictory } from '@/lib/game/world';
+import { resolveAssembly, checkVictory, ANOMALY_GRANTS } from '@/lib/game/world';
+import { ANOMALY_EFFECTS } from '@/lib/game/constants';
 import { INFRA_CONFIG, STATION_CONFIG, GROUND_OP_CONFIG, ORBITAL_CONFIG, EMPIRE_COLORS, STARTING_RESOURCES, GAME_TICK_MS, SYSTEM_COUNT } from '@/lib/game/constants';
 import { STARTER_DESIGNS, instantiateShip } from '@/lib/game/ship-designer';
 import { resolveAllCombat } from '@/lib/game/combat';
@@ -33,6 +34,7 @@ interface GameStore {
   myEmpire: Empire | null;
   empires: Empire[];
   events: GameEvent[];
+  anomalies: AnomalyReport[];
   ui: UIState;
 
   subscribeToGame: (gameId: string, playerId: string) => () => void;
@@ -52,6 +54,7 @@ interface GameStore {
   surveySystem:   (systemId: string) => Promise<void>;
   buildStation:   (systemId: string, type: StationType) => Promise<void>;
   colonizePlanet: (systemId: string, planetId: string) => Promise<void>;
+  investigateAnomaly: (systemId: string, planetId: string) => Promise<void>;
   buildInfra:     (systemId: string, planetId: string, type: InfraType) => Promise<void>;
   startResearch:  (nodeId: string) => Promise<void>;
   buildShip:      (designId: string, systemId: string) => Promise<void>;
@@ -123,6 +126,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
   myEmpire: null,
   empires: [],
   events: [],
+  anomalies: [],
   ui: DEFAULT_UI,
   _unsubs: [],
 
@@ -371,13 +375,19 @@ export const useGameStore = create<GameStore>((set, get) => ({
     );
     unsubs.push(eventSub);
 
+    const anomalySub = onSnapshot(collection(db, 'games', gameId, 'anomalies'), snap => {
+      const anomalies = snap.docs.map(d => d.data() as AnomalyReport);
+      set({ anomalies });
+    });
+    unsubs.push(anomalySub);
+
     set({ _unsubs: unsubs });
     return () => unsubs.forEach(u => u());
   },
 
   unsubscribe: () => {
     get()._unsubs.forEach(u => u());
-    set({ _unsubs: [], currentGame: null, myEmpire: null, empires: [], events: [], ui: DEFAULT_UI });
+    set({ _unsubs: [], currentGame: null, myEmpire: null, empires: [], events: [], anomalies: [], ui: DEFAULT_UI });
   },
 
   setView:       (view)    => set(s => ({ ui: { ...s.ui, view } })),
@@ -490,6 +500,108 @@ export const useGameStore = create<GameStore>((set, get) => ({
       message: `${myEmpire.username} dispatched colony ships to ${planet.name}`,
       tick: currentGame.tick, empireId: myEmpire.id, systemId, planetId,
     });
+  },
+
+  investigateAnomaly: async (systemId, planetId) => {
+    const { currentGame, myEmpire } = get();
+    if (!currentGame || !myEmpire) return;
+    if (!myEmpire.surveyedSystems.includes(systemId)) return;
+    if ((myEmpire.resolvedAnomalies ?? []).includes(planetId)) return;
+    if ((myEmpire.pendingInvestigations ?? []).some(p => p.planetId === planetId)) return;
+    // Cost: credits + research
+    if (myEmpire.resources.credits < 120 || myEmpire.resources.research < 40) return;
+
+    const sys = currentGame.galaxy.systems.find(s => s.id === systemId);
+    const planet = sys?.planets.find(p => p.id === planetId);
+    if (!planet?.hasAnomaly || !planet.anomalyType) return;
+
+    const anomalyType = planet.anomalyType;
+    const INVESTIGATE_TICKS = 6;
+    const completesAtTick = currentGame.tick + INVESTIGATE_TICKS;
+
+    const newResources = {
+      ...myEmpire.resources,
+      credits:  myEmpire.resources.credits  - 120,
+      research: myEmpire.resources.research - 40,
+    };
+    const pending: PendingInvestigation = { planetId, systemId, anomalyType, completesAtTick };
+
+    await updateDoc(doc(db, 'games', currentGame.id, 'empires', myEmpire.id), {
+      resources: newResources,
+      pendingInvestigations: [...(myEmpire.pendingInvestigations ?? []), pending],
+    });
+
+    // Placeholder report (status: generating) — drives the UI spinner
+    const reportRef = doc(db, 'games', currentGame.id, 'anomalies', planetId);
+    await setDoc(reportRef, {
+      id: planetId, empireId: myEmpire.id, systemId, planetId, anomalyType,
+      status: 'generating', createdTick: currentGame.tick,
+    } as AnomalyReport);
+
+    await addDoc(collection(db, 'games', currentGame.id, 'events'), {
+      id: `evt_${Date.now()}`, type: 'anomaly',
+      message: `${myEmpire.username} began investigating an anomaly at ${planet.name}`,
+      tick: currentGame.tick, empireId: myEmpire.id, systemId, planetId,
+    });
+
+    // Kick off AI generation (text + image). Falls back to fixed grants on failure.
+    const gameId = currentGame.id;
+    const empireId = myEmpire.id;
+    (async () => {
+      let outcomes: Partial<Resources> = ANOMALY_GRANTS[anomalyType] ?? { credits: 200 };
+      let text = '';
+      let summary = '';
+      let imageDataUrl: string | undefined;
+      let imagePrompt = '';
+      try {
+        const resp = await fetch('/api/anomaly', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            anomalyType,
+            flavor: ANOMALY_EFFECTS[anomalyType] ?? '',
+            systemName: sys?.name ?? '',
+            planetName: planet.name,
+            planetType: planet.type,
+          }),
+        });
+        const data = await resp.json();
+        if (data?.aiUsed) {
+          if (data.text) text = data.text;
+          if (data.summary) summary = data.summary;
+          if (data.imagePrompt) imagePrompt = data.imagePrompt;
+          if (data.imageDataUrl) imageDataUrl = data.imageDataUrl;
+          if (data.outcomes && Object.keys(data.outcomes).length > 0) outcomes = data.outcomes;
+        }
+      } catch { /* keep fallbacks */ }
+
+      if (!text) text = `Your survey team investigates the ${anomalyType.replace(/_/g, ' ')} and catalogues their findings.`;
+
+      // Write the finished report (retry without image if the doc is too large)
+      const report: AnomalyReport = {
+        id: planetId, empireId, systemId, planetId, anomalyType,
+        status: 'ready', text, summary, imagePrompt, outcomes,
+        createdTick: currentGame.tick,
+        ...(imageDataUrl ? { imageDataUrl } : {}),
+      };
+      try {
+        await setDoc(doc(db, 'games', gameId, 'anomalies', planetId), report);
+      } catch {
+        const { imageDataUrl: _drop, ...noImg } = report;
+        await setDoc(doc(db, 'games', gameId, 'anomalies', planetId), noImg as AnomalyReport);
+      }
+
+      // Patch the pending investigation with the resolved outcomes so the host
+      // applies them when the timer elapses.
+      const latest = get().myEmpire;
+      if (latest && latest.id === empireId) {
+        const updatedPending = (latest.pendingInvestigations ?? []).map(p =>
+          p.planetId === planetId ? { ...p, outcomes } : p);
+        await updateDoc(doc(db, 'games', gameId, 'empires', empireId), {
+          pendingInvestigations: updatedPending,
+        });
+      }
+    })();
   },
 
   buildInfra: async (systemId, planetId, type) => {
@@ -930,22 +1042,34 @@ export const useGameStore = create<GameStore>((set, get) => ({
       // ── Ship repair / regen (non-fighting ships in friendly space) ────────
       updatedShips = repairShips({ ...empire, ...updates } as Empire, updatedShips, movedFleets, newTick);
 
-      // ── Anomalies: investigate any in newly-surveyed systems ──────────────
       let resources = (updates.resources ?? empire.resources) as Resources;
       const oldSurveyed   = new Set(empire.surveyedSystems ?? []);
       const newSurveyed   = (updates.surveyedSystems ?? empire.surveyedSystems) as string[];
       const newlySurveyed = newSurveyed.filter(s => !oldSurveyed.has(s));
+
+      // ── Anomaly investigations: apply outcomes when the timer elapses ─────
       let resolvedAnomalies = empire.resolvedAnomalies;
-      if (newlySurveyed.length > 0) {
-        const anom = resolveAnomalies(empire, currentGame, newlySurveyed, newTick);
-        if (anom.resolvedPlanetIds.length > 0) {
-          resources = { ...resources };
-          for (const [k, v] of Object.entries(anom.grants) as [keyof Resources, number][]) {
-            resources[k] = (resources[k] ?? 0) + v;
+      let pendingInvestigations = empire.pendingInvestigations;
+      const doneInv = (empire.pendingInvestigations ?? []).filter(p => p.completesAtTick <= newTick);
+      if (doneInv.length > 0) {
+        resources = { ...resources };
+        const resolvedIds: string[] = [];
+        for (const inv of doneInv) {
+          const grant = inv.outcomes ?? ANOMALY_GRANTS[inv.anomalyType] ?? {};
+          for (const [k, v] of Object.entries(grant) as [keyof Resources, number][]) {
+            resources[k] = Math.max(0, (resources[k] ?? 0) + v);
           }
-          resolvedAnomalies = Array.from(new Set([...(empire.resolvedAnomalies ?? []), ...anom.resolvedPlanetIds]));
-          eventsToEmit.push(...anom.events);
+          resolvedIds.push(inv.planetId);
+          const sysName = galaxy.systems.find(s => s.id === inv.systemId)?.name ?? inv.systemId;
+          eventsToEmit.push({
+            id: `evt_${newTick}_anomdone_${inv.planetId}`,
+            type: 'anomaly',
+            message: `${empire.username} completed an anomaly investigation at ${sysName}`,
+            tick: newTick, empireId: empire.id, systemId: inv.systemId, planetId: inv.planetId,
+          });
         }
+        resolvedAnomalies = Array.from(new Set([...(empire.resolvedAnomalies ?? []), ...resolvedIds]));
+        pendingInvestigations = (empire.pendingInvestigations ?? []).filter(p => p.completesAtTick > newTick);
       }
 
       // ── Diplomacy: expire stale proposals ─────────────────────────────────
@@ -972,6 +1096,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
         controlledSystems: controlled,
         diplomacy,
         ...(resolvedAnomalies ? { resolvedAnomalies } : {}),
+        ...(pendingInvestigations !== undefined ? { pendingInvestigations } : {}),
       } as Empire;
 
       // ── Bot turn (produces a patch we merge before writing) ───────────────
@@ -1006,6 +1131,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
         controlledSystems:    merged.controlledSystems,
         diplomacy:            merged.diplomacy,
         ...(merged.resolvedAnomalies ? { resolvedAnomalies: merged.resolvedAnomalies } : {}),
+        ...(merged.pendingInvestigations !== undefined ? { pendingInvestigations: merged.pendingInvestigations } : {}),
       });
 
       // ── Game-doc systemState writes ───────────────────────────────────────

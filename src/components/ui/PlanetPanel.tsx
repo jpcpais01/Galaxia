@@ -5,7 +5,34 @@ import { PLANET_CONFIG, INFRA_CONFIG, GROUND_OP_CONFIG, ORBITAL_CONFIG } from '@
 import { renderPlanetSync, getPlanetBitmap } from '@/lib/game/planet-renderer';
 import { countUsedSlots } from '@/lib/game/economy';
 import { PixelIcon } from '@/components/ui/PixelIcon';
-import type { GroundOpType, OrbitalStructureType } from '@/types/game';
+import type { GroundOpType, OrbitalStructureType, Resources } from '@/types/game';
+
+const RESOURCE_LABELS: Record<string, string> = {
+  credits: 'Credits', minerals: 'Minerals', energy: 'Energy',
+  research: 'Research', compute: 'Compute', food: 'Food', population: 'Population',
+};
+
+function OutcomeList({ outcomes }: { outcomes: Partial<Resources> }) {
+  const entries = Object.entries(outcomes).filter(([, v]) => typeof v === 'number' && v !== 0);
+  if (entries.length === 0) return null;
+  return (
+    <div className="flex flex-wrap gap-1 mt-0.5">
+      {entries.map(([k, v]) => (
+        <span
+          key={k}
+          className="font-mono text-[9px] px-1.5 py-0.5 border"
+          style={{
+            color: (v as number) > 0 ? '#44ff88' : '#ff6666',
+            borderColor: (v as number) > 0 ? '#1a3a2a' : '#3a1a1a',
+            background: (v as number) > 0 ? '#08160e' : '#160808',
+          }}
+        >
+          {(v as number) > 0 ? '+' : ''}{v} {RESOURCE_LABELS[k] ?? k}
+        </span>
+      ))}
+    </div>
+  );
+}
 
 const GROUND_OP_LIST: { type: GroundOpType; label: string }[] = [
   { type: 'mineral_extractor',     label: 'Mineral Extractor'  },
@@ -44,7 +71,7 @@ function PlanetDisplay({ type, seed, size }: { type: string; seed: number; size:
 }
 
 export default function PlanetPanel() {
-  const { currentGame, myEmpire, ui, colonizePlanet, buildGroundOp, destroyInfra, destroyGroundOp, buildOrbitalStructure, destroyOrbitalStructure, setPanel } = useGameStore();
+  const { currentGame, myEmpire, ui, anomalies, colonizePlanet, investigateAnomaly, buildGroundOp, destroyInfra, destroyGroundOp, buildOrbitalStructure, destroyOrbitalStructure, setPanel } = useGameStore();
   const [expandedMoon, setExpandedMoon] = useState<string | null>(null);
 
   const system = currentGame?.galaxy.systems.find(s => s.id === ui.selectedSystemId);
@@ -60,6 +87,7 @@ export default function PlanetPanel() {
   const colonized    = myEmpire?.colonizedPlanets.includes(planet.id) ?? false;
   const pendingCol   = (myEmpire?.pendingColonizations ?? []).find(c => c.planetId === planet.id);
   const controlled   = myEmpire?.controlledSystems.includes(ui.selectedSystemId ?? '') ?? false;
+  const surveyed     = myEmpire?.surveyedSystems.includes(ui.selectedSystemId ?? '') ?? false;
   const canColonize  = controlled && planet.colonizable && !colonized && !pendingCol;
   const canAffordCol = (myEmpire?.resources.credits ?? 0) >= 150;
 
@@ -95,7 +123,9 @@ export default function PlanetPanel() {
             )}
             {planet.hasAnomaly && (
               <div className="text-[#ff8800] text-[9px]">
-                {planet.anomalyRevealed ? `★ ${planet.anomalyType?.replace('_', ' ').toUpperCase()}` : '★ ANOMALY DETECTED'}
+                {(myEmpire?.resolvedAnomalies ?? []).includes(planet.id)
+                  ? `★ ${planet.anomalyType?.replace(/_/g, ' ').toUpperCase()}`
+                  : '★ ANOMALY DETECTED'}
               </div>
             )}
           </div>
@@ -110,6 +140,61 @@ export default function PlanetPanel() {
             </div>
           </div>
         )}
+
+        {/* Anomaly investigation */}
+        {planet.hasAnomaly && surveyed && (() => {
+          const resolved = (myEmpire?.resolvedAnomalies ?? []).includes(planet.id);
+          const pending  = (myEmpire?.pendingInvestigations ?? []).find(p => p.planetId === planet.id);
+          const report   = anomalies.find(a => a.planetId === planet.id);
+          const canAffordInv = (myEmpire?.resources.credits ?? 0) >= 120 && (myEmpire?.resources.research ?? 0) >= 40;
+          const showImage = report?.imageDataUrl && (resolved || report.status === 'ready');
+          return (
+            <div className="pixel-panel p-2 flex flex-col gap-2" style={{ borderColor: '#ff8800' }}>
+              <div className="font-pixel text-[8px] text-[#ff8800]">★ SPATIAL ANOMALY</div>
+
+              {showImage && (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={report!.imageDataUrl} alt="anomaly" className="w-full border border-[#3a2a1a]" />
+              )}
+
+              {resolved ? (
+                report?.status === 'ready' ? (
+                  <>
+                    {report.text && <div className="font-mono text-[10px] text-[#c8b896] leading-relaxed">{report.text}</div>}
+                    {report.summary && <div className="font-mono text-[9px] text-[#44ff88]">{report.summary}</div>}
+                    {report.outcomes && <OutcomeList outcomes={report.outcomes} />}
+                  </>
+                ) : (
+                  <div className="font-mono text-[10px] text-[#8a7a5a]">Investigation complete.</div>
+                )
+              ) : pending ? (
+                <div className="font-mono text-[10px] flex flex-col gap-1">
+                  <div className="text-[#ffaa00] flex items-center gap-2">
+                    <span className="animate-pulse">◐</span> INVESTIGATING…
+                    <span className="ml-auto text-[#8a7a00]">ETA {Math.max(0, pending.completesAtTick - tick)}t</span>
+                  </div>
+                  {report?.status === 'generating' && (
+                    <div className="text-[#6a5a3a] text-[9px]">Analyzing signals & rendering imaging…</div>
+                  )}
+                  {report?.status === 'ready' && report.text && (
+                    <div className="text-[#c8b896] text-[10px] leading-relaxed mt-1">{report.text}</div>
+                  )}
+                </div>
+              ) : (
+                <>
+                  <div className="font-mono text-[9px] text-[#8a7a5a]">An unknown anomaly was detected here. Dispatch a science team to investigate.</div>
+                  <button
+                    onClick={() => investigateAnomaly(ui.selectedSystemId!, planet.id)}
+                    disabled={!canAffordInv}
+                    className="btn-gold w-full py-1.5 text-[9px] disabled:opacity-40"
+                  >
+                    INVESTIGATE <span className="text-[8px] text-[#6a5000]">120c · 40r · 6t</span>
+                  </button>
+                </>
+              )}
+            </div>
+          );
+        })()}
 
         {/* Colonize button */}
         {canColonize && (

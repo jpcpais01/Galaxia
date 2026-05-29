@@ -120,6 +120,29 @@ export interface PendingColonization {
   completesAtTick: number;
 }
 
+export interface PendingInvestigation {
+  planetId: string;
+  systemId: string;
+  anomalyType: string;
+  completesAtTick: number;
+  outcomes?: Partial<Resources>;   // filled in once the AI result returns
+}
+
+export interface AnomalyReport {
+  id: string;          // == planetId
+  empireId: string;
+  systemId: string;
+  planetId: string;
+  anomalyType: string;
+  status: 'generating' | 'ready';
+  text?: string;
+  imagePrompt?: string;
+  imageDataUrl?: string;
+  outcomes?: Partial<Resources>;
+  summary?: string;
+  createdTick: number;
+}
+
 export interface Station {
   id: string;
   type: StationType;
@@ -295,6 +318,7 @@ export interface Empire {
   surveyedSystems: string[];
   pendingSurveys: PendingSurvey[];
   pendingColonizations: PendingColonization[];
+  pendingInvestigations?: PendingInvestigation[];
   resolvedAnomalies?: string[];   // planet ids whose anomaly this empire has claimed
   eliminated?: boolean;           // lost all systems/stations/ships
   civilization?: Civilization;
