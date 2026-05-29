@@ -34,7 +34,7 @@ export default function AnomaliesPanel() {
   const tick = currentGame.tick;
   const surveyed = new Set(myEmpire.surveyedSystems ?? []);
   const resolved = new Set(myEmpire.resolvedAnomalies ?? []);
-  const canAffordInv = (myEmpire.resources.credits ?? 0) >= 120 && (myEmpire.resources.research ?? 0) >= 40;
+  const canAffordInv = (myEmpire.resources.credits ?? 0) >= 720 && (myEmpire.resources.research ?? 0) >= 240;
 
   // Gather every anomaly we know about (in a surveyed system)
   type Entry = { planet: Planet; system: StarSystem; status: 'available' | 'investigating' | 'done' };
@@ -99,7 +99,7 @@ export default function AnomaliesPanel() {
                     disabled={!canAffordInv}
                     className="btn-gold w-full py-1 text-[8px] disabled:opacity-40 mt-0.5"
                   >
-                    INVESTIGATE <span className="text-[7px] text-[#6a5000]">120c · 40r · 6t</span>
+                    INVESTIGATE <span className="text-[7px] text-[#6a5000]">720c · 240r · 36t</span>
                   </button>
                 </>
               )}

@@ -74,11 +74,13 @@ export function calcDesignStats(tiles: ShipTile[]): {
     if (tile.type === 'thruster' || tile.type === 'hyperdrive') hasThrust = true;
   }
 
+  // Costs and build time are ×6 the original (1-second ticks; tile hp is also ×6
+  // in TILE_CONFIG, so the summed hp above is already scaled).
   const activeTiles = tiles.filter(t => t.type !== 'empty').length;
-  const mineralCost = activeTiles * 25 + attack * 5 + defense * 3;
-  const energyCost  = activeTiles * 5  + speed * 2;
-  const creditCost  = activeTiles * 10 + attack * 3;
-  const buildTicks  = Math.max(5, Math.floor(activeTiles * 2.5));
+  const mineralCost = activeTiles * 150 + attack * 30 + defense * 18;
+  const energyCost  = activeTiles * 30  + speed * 12;
+  const creditCost  = activeTiles * 60  + attack * 18;
+  const buildTicks  = Math.max(30, Math.floor(activeTiles * 15));
 
   return {
     attack, defense, speed, hp,
@@ -134,42 +136,42 @@ export const STARTER_DESIGNS: Omit<ShipDesign, 'id'>[] = [
   {
     name: 'Scout',
     tiles: [
-      { type: 'cockpit',      x: 1, y: 0, hp: 40, maxHp: 40 },
-      { type: 'sensor_array', x: 0, y: 1, hp: 20, maxHp: 20 },
-      { type: 'thruster',     x: 1, y: 1, hp: 25, maxHp: 25 },
-      { type: 'thruster',     x: 2, y: 1, hp: 25, maxHp: 25 },
+      { type: 'cockpit',      x: 1, y: 0, hp: 240, maxHp: 240 },
+      { type: 'sensor_array', x: 0, y: 1, hp: 120, maxHp: 120 },
+      { type: 'thruster',     x: 1, y: 1, hp: 150, maxHp: 150 },
+      { type: 'thruster',     x: 2, y: 1, hp: 150, maxHp: 150 },
     ],
-    attack: 2, defense: 0, speed: 18, mineralCost: 80, energyCost: 15, creditCost: 40, buildTicks: 10,
+    attack: 2, defense: 0, speed: 18, mineralCost: 480, energyCost: 90, creditCost: 240, buildTicks: 60,
   },
   {
     name: 'Fighter',
     tiles: [
-      { type: 'cockpit',          x: 1, y: 0, hp: 40, maxHp: 40 },
-      { type: 'laser_cannon',     x: 0, y: 1, hp: 20, maxHp: 20 },
-      { type: 'crew_quarters',    x: 1, y: 1, hp: 30, maxHp: 30 },
-      { type: 'laser_cannon',     x: 2, y: 1, hp: 20, maxHp: 20 },
-      { type: 'thruster',         x: 0, y: 2, hp: 25, maxHp: 25 },
-      { type: 'shield_generator', x: 1, y: 2, hp: 30, maxHp: 30 },
-      { type: 'thruster',         x: 2, y: 2, hp: 25, maxHp: 25 },
+      { type: 'cockpit',          x: 1, y: 0, hp: 240, maxHp: 240 },
+      { type: 'laser_cannon',     x: 0, y: 1, hp: 120, maxHp: 120 },
+      { type: 'crew_quarters',    x: 1, y: 1, hp: 180, maxHp: 180 },
+      { type: 'laser_cannon',     x: 2, y: 1, hp: 120, maxHp: 120 },
+      { type: 'thruster',         x: 0, y: 2, hp: 150, maxHp: 150 },
+      { type: 'shield_generator', x: 1, y: 2, hp: 180, maxHp: 180 },
+      { type: 'thruster',         x: 2, y: 2, hp: 150, maxHp: 150 },
     ],
-    attack: 24, defense: 20, speed: 16, mineralCost: 200, energyCost: 30, creditCost: 80, buildTicks: 18,
+    attack: 24, defense: 20, speed: 16, mineralCost: 1200, energyCost: 180, creditCost: 480, buildTicks: 108,
   },
   {
     name: 'Cruiser',
     tiles: [
-      { type: 'cockpit',          x: 2, y: 0, hp: 40, maxHp: 40 },
-      { type: 'missile_launcher', x: 1, y: 1, hp: 20, maxHp: 20 },
-      { type: 'crew_quarters',    x: 2, y: 1, hp: 30, maxHp: 30 },
-      { type: 'missile_launcher', x: 3, y: 1, hp: 20, maxHp: 20 },
-      { type: 'armor_plate',      x: 0, y: 2, hp: 50, maxHp: 50 },
-      { type: 'shield_generator', x: 1, y: 2, hp: 30, maxHp: 30 },
-      { type: 'repair_bay',       x: 2, y: 2, hp: 25, maxHp: 25 },
-      { type: 'shield_generator', x: 3, y: 2, hp: 30, maxHp: 30 },
-      { type: 'armor_plate',      x: 4, y: 2, hp: 50, maxHp: 50 },
-      { type: 'thruster',         x: 1, y: 3, hp: 25, maxHp: 25 },
-      { type: 'hyperdrive',       x: 2, y: 3, hp: 20, maxHp: 20 },
-      { type: 'thruster',         x: 3, y: 3, hp: 25, maxHp: 25 },
+      { type: 'cockpit',          x: 2, y: 0, hp: 240, maxHp: 240 },
+      { type: 'missile_launcher', x: 1, y: 1, hp: 120, maxHp: 120 },
+      { type: 'crew_quarters',    x: 2, y: 1, hp: 180, maxHp: 180 },
+      { type: 'missile_launcher', x: 3, y: 1, hp: 120, maxHp: 120 },
+      { type: 'armor_plate',      x: 0, y: 2, hp: 300, maxHp: 300 },
+      { type: 'shield_generator', x: 1, y: 2, hp: 180, maxHp: 180 },
+      { type: 'repair_bay',       x: 2, y: 2, hp: 150, maxHp: 150 },
+      { type: 'shield_generator', x: 3, y: 2, hp: 180, maxHp: 180 },
+      { type: 'armor_plate',      x: 4, y: 2, hp: 300, maxHp: 300 },
+      { type: 'thruster',         x: 1, y: 3, hp: 150, maxHp: 150 },
+      { type: 'hyperdrive',       x: 2, y: 3, hp: 120, maxHp: 120 },
+      { type: 'thruster',         x: 3, y: 3, hp: 150, maxHp: 150 },
     ],
-    attack: 36, defense: 60, speed: 23, mineralCost: 450, energyCost: 70, creditCost: 180, buildTicks: 30,
+    attack: 36, defense: 60, speed: 23, mineralCost: 2700, energyCost: 420, creditCost: 1080, buildTicks: 180,
   },
 ];

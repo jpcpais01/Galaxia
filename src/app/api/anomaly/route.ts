@@ -17,7 +17,7 @@ function clampOutcomes(raw: unknown): Outcomes {
   for (const k of keys) {
     const v = (raw as Record<string, unknown>)[k];
     if (typeof v === 'number' && isFinite(v)) {
-      out[k] = Math.round(Math.max(-250, Math.min(600, v)));
+      out[k] = Math.round(Math.max(-1500, Math.min(3600, v)));
     }
   }
   return out;
@@ -111,7 +111,7 @@ Location: planet "${planetName ?? 'an unnamed world'}" (${planetType ?? 'unknown
 Produce:
 1. "anomaly_text": a vivid, self-contained discovery report of 2-4 sentences. Sci-fi tone, evocative, specific to this anomaly type and world.
 2. "anomaly_image_generation_prompt": a concise vivid prompt for a 4:3 sci-fi illustration of this scene/discovery. Cinematic, detailed, NO text or words in the image.
-3. "outcomes": resource changes the empire gains or loses from this discovery. Use any of: credits, minerals, energy, research, compute, food, population. Values may be positive or negative. Keep magnitudes modest and balanced (roughly -200 to +500). Include a short "summary" describing the reward/cost. Most anomalies should be net positive but interesting ones can carry a cost.`;
+3. "outcomes": resource changes the empire gains or loses from this discovery. Use any of: credits, minerals, energy, research, compute, food, population. Values may be positive or negative. Keep magnitudes modest and balanced (roughly -1200 to +3000). Include a short "summary" describing the reward/cost. Most anomalies should be net positive but interesting ones can carry a cost.`;
 
   try {
     const result = await generateText(apiKey, prompt);

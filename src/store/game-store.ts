@@ -93,15 +93,15 @@ function applyOriginBonus(resources: Resources, civ?: Civilization): Resources {
   const r = { ...resources };
   switch (civ.origin) {
     case 'ancient_empire':
-      r.research += 200;
-      r.compute  += 100;
+      r.research += 1200;
+      r.compute  += 600;
       break;
     case 'recent_uplift':
-      r.credits  += 500;
-      r.minerals += 300;
+      r.credits  += 3000;
+      r.minerals += 1800;
       break;
     case 'merchant_guild':
-      r.credits  += 600;
+      r.credits  += 3600;
       break;
     // 'warrior_clans': +25% combat — applied at ship-build time
     // 'refugee_fleet': +3 ships — complex, skip starting ships for now
@@ -161,7 +161,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       createdAt: Date.now(), maxPlayers, botCount,
       currentPlayers: 1, tick: 0, lastTickTime: Date.now(),
       seed, starCount, galaxy, systemStates, assembly: [],
-      maxTick: 2000,
+      maxTick: 12000,
     };
 
     const { galaxy: _g, ...gameDoc } = game;
@@ -413,15 +413,15 @@ export const useGameStore = create<GameStore>((set, get) => ({
     );
     if (!hasAdjacentSurveyed) return;
 
-    // Survey costs a small amount of credits (fuel/logistics) and takes 18 ticks
-    if (myEmpire.resources.credits < 30) return;
+    // Survey costs a small amount of credits (fuel/logistics) and takes 108 ticks
+    if (myEmpire.resources.credits < 180) return;
 
     const pendingSurvey: PendingSurvey = {
       systemId,
-      completesAtTick: currentGame.tick + 18,
+      completesAtTick: currentGame.tick + 108,
     };
     await updateDoc(doc(db, 'games', currentGame.id, 'empires', myEmpire.id), {
-      resources: { ...myEmpire.resources, credits: myEmpire.resources.credits - 30 },
+      resources: { ...myEmpire.resources, credits: myEmpire.resources.credits - 180 },
       pendingSurveys: [...(myEmpire.pendingSurveys ?? []), pendingSurvey],
     });
 
@@ -482,8 +482,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
     if (!myEmpire.controlledSystems.includes(systemId)) return;
     if (myEmpire.colonizedPlanets.includes(planetId)) return;
     if ((myEmpire.pendingColonizations ?? []).some(c => c.planetId === planetId)) return;
-    // Colony ships cost minerals (hull) + credits, and take 30 ticks to arrive
-    if (myEmpire.resources.credits < 120 || myEmpire.resources.minerals < 80) return;
+    // Colony ships cost minerals (hull) + credits, and take 180 ticks to arrive
+    if (myEmpire.resources.credits < 720 || myEmpire.resources.minerals < 480) return;
 
     const planet = currentGame.galaxy.systems
       .find(s => s.id === systemId)?.planets
@@ -492,12 +492,12 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
     const newResources = {
       ...myEmpire.resources,
-      credits:  myEmpire.resources.credits - 120,
-      minerals: myEmpire.resources.minerals - 80,
+      credits:  myEmpire.resources.credits - 720,
+      minerals: myEmpire.resources.minerals - 480,
     };
     const pending: PendingColonization = {
       planetId, systemId,
-      completesAtTick: currentGame.tick + 30,
+      completesAtTick: currentGame.tick + 180,
     };
 
     await updateDoc(doc(db, 'games', currentGame.id, 'empires', myEmpire.id), {
@@ -519,20 +519,20 @@ export const useGameStore = create<GameStore>((set, get) => ({
     if ((myEmpire.resolvedAnomalies ?? []).includes(planetId)) return;
     if ((myEmpire.pendingInvestigations ?? []).some(p => p.planetId === planetId)) return;
     // Cost: credits + research
-    if (myEmpire.resources.credits < 120 || myEmpire.resources.research < 40) return;
+    if (myEmpire.resources.credits < 720 || myEmpire.resources.research < 240) return;
 
     const sys = currentGame.galaxy.systems.find(s => s.id === systemId);
     const planet = sys?.planets.find(p => p.id === planetId);
     if (!planet?.hasAnomaly || !planet.anomalyType) return;
 
     const anomalyType = planet.anomalyType;
-    const INVESTIGATE_TICKS = 6;
+    const INVESTIGATE_TICKS = 36;
     const completesAtTick = currentGame.tick + INVESTIGATE_TICKS;
 
     const newResources = {
       ...myEmpire.resources,
-      credits:  myEmpire.resources.credits  - 120,
-      research: myEmpire.resources.research - 40,
+      credits:  myEmpire.resources.credits  - 720,
+      research: myEmpire.resources.research - 240,
     };
     const pending: PendingInvestigation = { planetId, systemId, anomalyType, completesAtTick };
 
@@ -558,7 +558,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const gameId = currentGame.id;
     const empireId = myEmpire.id;
     (async () => {
-      let outcomes: Partial<Resources> = ANOMALY_GRANTS[anomalyType] ?? { credits: 200 };
+      let outcomes: Partial<Resources> = ANOMALY_GRANTS[anomalyType] ?? { credits: 1200 };
       let text = '';
       let summary = '';
       let imageDataUrl: string | undefined;
@@ -1142,7 +1142,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
       // ── Bot turn (produces a patch we merge before writing) ───────────────
       const botSSW: { path: string; value: unknown }[] = [];
-      if (empire.isBot && newTick % 2 === 0) {
+      if (empire.isBot && newTick % 12 === 0) {
         const res = runBotTurn(merged, currentGame, newTick, empires);
         merged = { ...merged, ...res.patch } as Empire;
         eventsToEmit.push(...res.events);
@@ -1372,7 +1372,7 @@ function processFleetMovement(fleet: Fleet, ships: Ship[], galaxy: import('@/typ
     const from = fleet.transitFromSystemId ?? fleet.systemId;
     const to   = fleet.transitToSystemId;
     const legDist = Math.max(80, systemDistance(galaxy, from, to));
-    const inc = Math.max(0.03, fleetSpeed / (legDist * 0.5));
+    const inc = Math.max(0.005, fleetSpeed / (legDist * 3)); // ÷6 for 1s ticks (6× more ticks per leg)
     const progress = (fleet.transitProgress ?? 0) + inc;
 
     if (progress >= 1) {
@@ -1418,7 +1418,7 @@ function processFleetMovement(fleet: Fleet, ships: Ship[], galaxy: import('@/typ
         state: 'idle' as const,
       };
     }
-    const step = fleetSpeed * 0.003;
+    const step = fleetSpeed * 0.0005; // ÷6 for 1s ticks
     const dxNorm = (dx / dist) * Math.min(step, dist);
     const dyNorm = (dy / dist) * Math.min(step, dist);
     return {
@@ -1463,9 +1463,11 @@ function repairShips(empire: Empire, ships: Ship[], fleets: Fleet[], tick: numbe
     if (fighting.has(s.id)) return s;
     if ((s.buildCompletedTick ?? 0) > tick) return s;
 
+    // Flat repair-bay regen stays the same (×6 HP ⇒ 6× more ticks to heal, by design);
+    // %-based regen is ÷6 so it also takes 6× more ticks at 1-second cadence.
     let regen = s.tiles.filter(t => t.type === 'repair_bay').length * 5;
-    if (controlled.has(s.systemId))      regen += Math.ceil(s.maxHp * 0.04);
-    if (shipyardSystems.has(s.systemId)) regen += Math.ceil(s.maxHp * 0.06);
+    if (controlled.has(s.systemId))      regen += Math.ceil(s.maxHp * 0.0067);
+    if (shipyardSystems.has(s.systemId)) regen += Math.ceil(s.maxHp * 0.01);
     if (regen <= 0) return s;
     return { ...s, hp: Math.min(s.maxHp, s.hp + regen) };
   });

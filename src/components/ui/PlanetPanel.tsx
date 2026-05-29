@@ -89,7 +89,7 @@ export default function PlanetPanel() {
   const controlled   = myEmpire?.controlledSystems.includes(ui.selectedSystemId ?? '') ?? false;
   const surveyed     = myEmpire?.surveyedSystems.includes(ui.selectedSystemId ?? '') ?? false;
   const canColonize  = controlled && planet.colonizable && !colonized && !pendingCol;
-  const canAffordCol = (myEmpire?.resources.credits ?? 0) >= 120 && (myEmpire?.resources.minerals ?? 0) >= 80;
+  const canAffordCol = (myEmpire?.resources.credits ?? 0) >= 720 && (myEmpire?.resources.minerals ?? 0) >= 480;
 
   const usedSlots = countUsedSlots(planet.id, myEmpire?.infrastructure ?? []);
   const myInfra   = (myEmpire?.infrastructure ?? []).filter(i => i.planetId === planet.id);
@@ -146,7 +146,7 @@ export default function PlanetPanel() {
           const resolved = (myEmpire?.resolvedAnomalies ?? []).includes(planet.id);
           const pending  = (myEmpire?.pendingInvestigations ?? []).find(p => p.planetId === planet.id);
           const report   = anomalies.find(a => a.planetId === planet.id);
-          const canAffordInv = (myEmpire?.resources.credits ?? 0) >= 120 && (myEmpire?.resources.research ?? 0) >= 40;
+          const canAffordInv = (myEmpire?.resources.credits ?? 0) >= 720 && (myEmpire?.resources.research ?? 0) >= 240;
           const showImage = report?.imageDataUrl && (resolved || report.status === 'ready');
           return (
             <div className="pixel-panel p-2 flex flex-col gap-2" style={{ borderColor: '#ff8800' }}>
@@ -188,7 +188,7 @@ export default function PlanetPanel() {
                     disabled={!canAffordInv}
                     className="btn-gold w-full py-1.5 text-[9px] disabled:opacity-40"
                   >
-                    INVESTIGATE <span className="text-[8px] text-[#6a5000]">120c · 40r · 6t</span>
+                    INVESTIGATE <span className="text-[8px] text-[#6a5000]">720c · 240r · 36t</span>
                   </button>
                 </>
               )}
@@ -204,7 +204,7 @@ export default function PlanetPanel() {
             className="btn-gold w-full py-2 text-[9px] disabled:opacity-40"
           >
             COLONIZE PLANET
-            <span className="block text-[8px] text-[#6a5000]">80 min · 120 cr • 30 ticks • {planet.infraSlots} build slots</span>
+            <span className="block text-[8px] text-[#6a5000]">480 min · 720 cr • 180 ticks • {planet.infraSlots} build slots</span>
           </button>
         )}
 

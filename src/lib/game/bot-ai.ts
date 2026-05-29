@@ -182,15 +182,15 @@ export function runBotTurn(empire: Empire, game: GameMeta, tick: number, allEmpi
   }
 
   // 1b. Investigate an anomaly in surveyed space (host applies fallback grants)
-  if (r.credits >= 120 && r.research >= 40 && rng.next() < 0.5) {
+  if (r.credits >= 720 && r.research >= 240 && rng.next() < 0.5) {
     const pendingPlanets = new Set(pendingInv.map(p => p.planetId));
     outer: for (const sysId of surveyed) {
       const sys = game.galaxy.systems.find(s => s.id === sysId);
       if (!sys) continue;
       for (const p of sys.planets) {
         if (p.hasAnomaly && p.anomalyType && !resolvedAnom.has(p.id) && !pendingPlanets.has(p.id)) {
-          pendingInv.push({ planetId: p.id, systemId: sysId, anomalyType: p.anomalyType, completesAtTick: tick + 6 });
-          r.credits -= 120; r.research -= 40;
+          pendingInv.push({ planetId: p.id, systemId: sysId, anomalyType: p.anomalyType, completesAtTick: tick + 36 });
+          r.credits -= 720; r.research -= 240;
           touched.investigations = true; touched.resources = true;
           break outer;
         }
@@ -199,11 +199,11 @@ export function runBotTurn(empire: Empire, game: GameMeta, tick: number, allEmpi
   }
 
   // 2. Colonize a planet in controlled space
-  if (rng.next() < 0.5 && r.credits >= 120 && r.minerals >= 80) {
+  if (rng.next() < 0.5 && r.credits >= 720 && r.minerals >= 480) {
     const target = bestPlanetToColonize({ ...empire, colonizedPlanets: colonized, controlledSystems: controlled }, game);
     if (target) {
       colonized.push(target.planetId); touched.colonized = true;
-      r.credits -= 120; r.minerals -= 80; touched.resources = true;
+      r.credits -= 720; r.minerals -= 480; touched.resources = true;
     }
   }
 
@@ -233,12 +233,12 @@ export function runBotTurn(empire: Empire, game: GameMeta, tick: number, allEmpi
   }
 
   // 4. Survey outward
-  if (rng.next() < 0.6 && r.credits >= 30) {
+  if (rng.next() < 0.6 && r.credits >= 180) {
     const options = nearbyUnsurveyed({ ...empire, surveyedSystems: surveyed, controlledSystems: controlled }, game);
     if (options.length > 0) {
       const pick = rng.pick(options);
       surveyed.push(pick); touched.surveyed = true;
-      r.credits -= 30; touched.resources = true;
+      r.credits -= 180; touched.resources = true;
       ssw.push({ path: `systemStates.${pick}.surveyedBy`, value: 'ARRAY_UNION' });
     }
   }

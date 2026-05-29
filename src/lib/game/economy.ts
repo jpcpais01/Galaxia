@@ -185,7 +185,8 @@ export function computeResourceRates(empire: Empire, currentTick = 0): Resources
   const popNow = empire.resources.population;
   if (colonies > 0 && popNow < housingCap && empire.resources.food > 0) {
     const popBonus = 1 + (resourceBonuses['population'] ?? 0) / 100;
-    rates.population += colonies * popBonus;
+    // ÷6 for 1-second ticks: growth accrues over 6× as many ticks (same wall-clock)
+    rates.population += (colonies * popBonus) / 6;
   }
 
   // Trade routes: each trade-partner relation generates commerce income

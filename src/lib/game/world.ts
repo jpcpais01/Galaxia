@@ -44,14 +44,14 @@ export function computeSensorReveals(empire: Empire, galaxy: GalaxyData): string
 // Concrete one-time resource grants for each anomaly type. (The flavour text in
 // ANOMALY_EFFECTS describes the theme; here we grant tangible resources.)
 export const ANOMALY_GRANTS: Record<string, Partial<Resources>> = {
-  ancient_ruins:      { credits: 500, research: 200 },
-  derelict_ship:      { minerals: 300, credits: 150 },
-  quantum_fissure:    { research: 350 },
-  dark_matter_cloud:  { energy: 300, compute: 40 },
-  time_anomaly:       { research: 150, compute: 80 },
-  precursor_artifact: { compute: 180, research: 100 },
-  psionic_resonance:  { credits: 250, research: 120 },
-  void_rift:          { credits: 350, minerals: 100 },
+  ancient_ruins:      { credits: 3000, research: 1200 },
+  derelict_ship:      { minerals: 1800, credits: 900 },
+  quantum_fissure:    { research: 2100 },
+  dark_matter_cloud:  { energy: 1800, compute: 240 },
+  time_anomaly:       { research: 900, compute: 480 },
+  precursor_artifact: { compute: 1080, research: 600 },
+  psionic_resonance:  { credits: 1500, research: 720 },
+  void_rift:          { credits: 2100, minerals: 600 },
 };
 
 export interface AnomalyResult {
@@ -100,11 +100,11 @@ export type AssemblyResolutionKey =
 export const ASSEMBLY_RESOLUTIONS: Record<AssemblyResolutionKey, {
   label: string; description: string; grant?: Partial<Resources>; peace?: boolean;
 }> = {
-  research_grant: { label: 'Research Initiative',   description: '+300 research to every empire', grant: { research: 300 } },
-  trade_pact:     { label: 'Galactic Trade Pact',   description: '+250 credits to every empire',  grant: { credits: 250 } },
-  mining_charter: { label: 'Mining Charter',        description: '+200 minerals to every empire', grant: { minerals: 200 } },
-  energy_subsidy: { label: 'Energy Subsidy',        description: '+150 energy to every empire',   grant: { energy: 150 } },
-  galactic_peace: { label: 'Galactic Peace Accord', description: 'Ends all active wars',            peace: true },
+  research_grant: { label: 'Research Initiative',   description: '+1800 research to every empire', grant: { research: 1800 } },
+  trade_pact:     { label: 'Galactic Trade Pact',   description: '+1500 credits to every empire',  grant: { credits: 1500 } },
+  mining_charter: { label: 'Mining Charter',        description: '+1200 minerals to every empire', grant: { minerals: 1200 } },
+  energy_subsidy: { label: 'Energy Subsidy',        description: '+900 energy to every empire',    grant: { energy: 900 } },
+  galactic_peace: { label: 'Galactic Peace Accord', description: 'Ends all active wars',             peace: true },
 };
 
 export interface AssemblyResolveResult {

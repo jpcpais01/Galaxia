@@ -54,8 +54,8 @@ export default function SystemPanel() {
     s => s.systemId === system.id && s.buildCompletedTick > tick
   ) ?? null;
   const canClaim       = !!(myEmpire && surveyed && !state?.ownerId && !state?.stationId);
-  const canAffordStn   = (myEmpire?.resources.minerals ?? 0) >= 300 &&
-                         (myEmpire?.resources.credits  ?? 0) >= 200;
+  const canAffordStn   = (myEmpire?.resources.minerals ?? 0) >= 1500 &&
+                         (myEmpire?.resources.credits  ?? 0) >= 900;
 
   // Ground ops on planets/moons in this system (only if controlled)
   const myGroundOps = (myEmpire?.groundOps ?? []).filter(g => g.systemId === system.id);
@@ -139,7 +139,7 @@ export default function SystemPanel() {
               className="btn-cyan text-[9px] w-full py-2 disabled:opacity-40 disabled:cursor-not-allowed"
             >
               BUILD STATION
-              <span className="block text-[8px] text-[#3a6a8a]">300 min • 200 crd • 50 ticks</span>
+              <span className="block text-[8px] text-[#3a6a8a]">1500 min • 900 crd • 270 ticks</span>
             </button>
           )}
           {myPendingStation && (

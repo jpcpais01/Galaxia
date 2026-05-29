@@ -1,11 +1,20 @@
 import type { ResearchNode, ResearchPath } from '@/types/game';
 
+// Research/compute costs are ×6 the base values below — 1-second ticks accrue
+// research-points-per-tick at the same per-tick rate, so a node takes 6× as many
+// ticks (same wall-clock time as the old 6-second cadence).
+const TICK_SCALE = 6;
 const node = (
   id: string, name: string, description: string,
   path: ResearchPath, tier: number, costResearch: number, costCompute: number,
   prerequisites: string[],
   effects: ResearchNode['effects']
-): ResearchNode => ({ id, name, description, path, tier, costResearch, costCompute, prerequisites, effects });
+): ResearchNode => ({
+  id, name, description, path, tier,
+  costResearch: costResearch * TICK_SCALE,
+  costCompute: costCompute * TICK_SCALE,
+  prerequisites, effects,
+});
 
 // Cost-by-tier curve (research points). Compute cost layered on the upper tiers.
 const RC = [0, 60, 150, 280, 460, 700, 1000, 1380, 1850, 2450, 3200, 4200, 5400];
