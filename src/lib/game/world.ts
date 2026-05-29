@@ -130,30 +130,17 @@ export function resolveAssembly(empires: Empire[], game: GameMeta, tick: number)
 export interface VictoryResult {
   winnerId: string;
   winnerName: string;
-  victoryType: 'domination' | 'singularity' | 'score';
+  victoryType: 'domination';
 }
 
-export function checkVictory(empires: Empire[], game: GameMeta, tick: number): VictoryResult | null {
-  const real = empires.filter(e => !!e); // all participants
+// Domination is the only victory: the last empire still controlling any systems wins.
+export function checkVictory(empires: Empire[], _game: GameMeta, _tick: number): VictoryResult | null {
+  const real = empires.filter(e => !!e);
   if (real.length < 2) return null;
 
-  // 1. Singularity — first empire to complete The Singularity (ai_5)
-  for (const e of real) {
-    if (e.completedResearch.includes('ai_5')) {
-      return { winnerId: e.id, winnerName: e.username, victoryType: 'singularity' };
-    }
-  }
-
-  // 2. Domination — only one empire still controls any systems
   const alive = real.filter(e => (e.controlledSystems?.length ?? 0) > 0);
   if (alive.length === 1) {
     return { winnerId: alive[0].id, winnerName: alive[0].username, victoryType: 'domination' };
-  }
-
-  // 3. Score — when the time limit elapses, highest score wins
-  if (game.maxTick && tick >= game.maxTick) {
-    const sorted = [...real].sort((a, b) => (b.score ?? 0) - (a.score ?? 0));
-    return { winnerId: sorted[0].id, winnerName: sorted[0].username, victoryType: 'score' };
   }
 
   return null;
