@@ -221,7 +221,10 @@ export default function HUD({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <div className="flex flex-col h-screen w-screen overflow-hidden bg-space-900">
+    <div
+      className="flex flex-col h-screen w-screen overflow-hidden bg-space-900"
+      onContextMenu={(e) => e.preventDefault()}
+    >
       <TopBar />
 
       <div className="flex flex-1 overflow-hidden">

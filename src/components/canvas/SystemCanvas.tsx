@@ -1,5 +1,5 @@
 'use client';
-import { useRef, useEffect, useCallback } from 'react';
+import { useRef, useEffect, useCallback, useState } from 'react';
 import { useGameStore } from '@/store/game-store';
 import { STAR_CONFIG, PLANET_CONFIG, STATION_CONFIG } from '@/lib/game/constants';
 import { renderPlanetSync, preloadPlanets } from '@/lib/game/planet-renderer';
@@ -38,6 +38,7 @@ export default function SystemCanvas() {
   const stationHitsRef = useRef<{ id: string; empireId: string; mine: boolean; x: number; y: number }[]>([]);
 
   const { currentGame, empires, myEmpire, ui, selectPlanet, setView, selectFleet, moveFleetInSystem, setFleetTask } = useGameStore();
+  const [hover, setHover] = useState<{ kind: 'fleet' | 'station'; id: string; empireId: string; x: number; y: number } | null>(null);
 
   const system: StarSystem | undefined = currentGame?.galaxy.systems.find(
     s => s.id === ui.selectedSystemId
@@ -535,8 +536,73 @@ export default function SystemCanvas() {
     selectPlanet(null);
   };
 
+  // Hover detection for fleet/station tooltips
+  const onMouseMove = (e: React.MouseEvent) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const rect = canvas.getBoundingClientRect();
+    const mx = e.clientX - rect.left;
+    const my = e.clientY - rect.top;
+    const within = (x: number, y: number, r: number) => (mx - x) ** 2 + (my - y) ** 2 < r * r;
+    const f = fleetHitsRef.current.find(h => within(h.x, h.y, 16));
+    const s = !f ? stationHitsRef.current.find(h => within(h.x, h.y, 13)) : undefined;
+    if (f)      setHover({ kind: 'fleet',   id: f.id, empireId: f.empireId, x: f.x, y: f.y });
+    else if (s) setHover({ kind: 'station', id: s.id, empireId: s.empireId, x: s.x, y: s.y });
+    else        setHover(null);
+    canvas.style.cursor = (f || s) ? 'pointer' : 'crosshair';
+  };
+
+  const onContextMenu = (e: React.MouseEvent) => {
+    e.preventDefault();
+    selectFleet(null);
+    selectPlanet(null);
+    setHover(null);
+  };
+
   // Selected fleet overlay info
   const selFleet: Fleet | undefined = myEmpire?.fleets?.find(f => f.id === ui.selectedFleetId && f.systemId === system?.id);
+
+  // Resolve the hovered object into displayable stats
+  const hoverInfo = (() => {
+    if (!hover) return null;
+    const emp = empires.find(e => e.id === hover.empireId);
+    if (!emp) return null;
+    const mine = emp.id === myEmpire?.id;
+    if (hover.kind === 'fleet') {
+      const fleet = (emp.fleets ?? []).find(f => f.id === hover.id);
+      if (!fleet) return null;
+      const fShips = emp.ships.filter(s => fleet.shipIds.includes(s.id));
+      const hp = fShips.reduce((a, s) => a + s.hp, 0);
+      const maxHp = fShips.reduce((a, s) => a + s.maxHp, 0) || 1;
+      const atk = fShips.reduce((a, s) => a + s.attack, 0);
+      const def = fShips.reduce((a, s) => a + s.defense, 0);
+      return {
+        title: fleet.name, owner: emp.username, mine, x: hover.x, y: hover.y,
+        rows: [
+          ['Ships', `${fleet.shipIds.length}`],
+          ['Hull', `${hp}/${maxHp}`],
+          ['Firepower', `${atk} atk`],
+          ['Defense', `${def} def`],
+          ['Status', fleet.state],
+        ] as [string, string][],
+        hpPct: hp / maxHp,
+      };
+    }
+    const stn = emp.stations.find(s => s.id === hover.id);
+    if (!stn) return null;
+    const cfg = STATION_CONFIG[stn.type];
+    const hp = stn.hp ?? cfg.hp;
+    const maxHp = stn.maxHp ?? cfg.hp;
+    return {
+      title: cfg.label, owner: emp.username, mine, x: hover.x, y: hover.y,
+      rows: [
+        ['Hull', `${hp}/${maxHp}`],
+        ['Firepower', `${cfg.attack} atk`],
+        ['Defense', `${cfg.defense} def`],
+      ] as [string, string][],
+      hpPct: hp / maxHp,
+    };
+  })();
 
   return (
     <div className="relative w-full h-full">
@@ -544,7 +610,40 @@ export default function SystemCanvas() {
         ref={canvasRef}
         className="w-full h-full cursor-pointer"
         onClick={onClick}
+        onMouseMove={onMouseMove}
+        onMouseLeave={() => setHover(null)}
+        onContextMenu={onContextMenu}
       />
+
+      {/* Hover tooltip — station / fleet details */}
+      {hoverInfo && (
+        <div
+          className="absolute z-20 pixel-panel px-2 py-1.5 text-[8px] font-mono pointer-events-none flex flex-col gap-0.5 w-36"
+          style={{
+            left: Math.min(hoverInfo.x + 16, (canvasRef.current?.width ?? 9999) - 150),
+            top: Math.max(4, hoverInfo.y - 60),
+            borderColor: hoverInfo.mine ? '#44aaff' : '#aa5544',
+          }}
+        >
+          <div className="flex justify-between items-center">
+            <span className="font-pixel text-[8px]" style={{ color: hoverInfo.mine ? '#9ab8ff' : '#ffaa88' }}>{hoverInfo.title}</span>
+          </div>
+          <div className="text-[#5a7a8a]">{hoverInfo.mine ? 'Yours' : hoverInfo.owner}</div>
+          {/* HP bar */}
+          <div className="h-1 bg-[#050510] my-0.5">
+            <div className="h-full" style={{
+              width: `${Math.max(0, Math.min(1, hoverInfo.hpPct)) * 100}%`,
+              background: hoverInfo.hpPct > 0.5 ? '#44ff88' : hoverInfo.hpPct > 0.25 ? '#ffaa00' : '#ff4455',
+            }} />
+          </div>
+          {hoverInfo.rows.map(([k, v]) => (
+            <div key={k} className="flex justify-between">
+              <span className="text-[#3a5a6a]">{k}</span>
+              <span className="text-[#c0d0e0]">{v}</span>
+            </div>
+          ))}
+        </div>
+      )}
       <button
         className="absolute top-3 left-3 btn-gray text-[9px] px-2 py-1"
         onClick={() => { setView('galaxy'); selectPlanet(null); }}

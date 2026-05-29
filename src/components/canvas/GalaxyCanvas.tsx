@@ -77,7 +77,7 @@ export default function GalaxyCanvas() {
   const bgRef     = useRef<BgStar[][]>([[], [], []]);
   const nebRef    = useRef<Nebula[]>([]);
 
-  const { currentGame, empires, ui, selectSystem, setCamera, setHoverSystem, moveFleet, setView } = useGameStore();
+  const { currentGame, empires, ui, selectSystem, selectFleet, setCamera, setHoverSystem, moveFleet, setView } = useGameStore();
   const { user } = useAuthStore();
   const lastClickRef = useRef<{ id: string; t: number } | null>(null);
 
@@ -616,7 +616,15 @@ export default function GalaxyCanvas() {
 
   /* ─── Mouse / wheel ──────────────────────────────────────────── */
   const onMouseDown = (e: React.MouseEvent) => {
+    if (e.button !== 0) return;   // ignore right/middle for pan & select
     dragRef.current = { x: e.clientX, y: e.clientY, camX: ui.cameraX, camY: ui.cameraY };
+  };
+
+  // Right-click clears the current selection (browser menu is suppressed).
+  const onContextMenu = (e: React.MouseEvent) => {
+    e.preventDefault();
+    selectFleet(null);
+    selectSystem(null);
   };
 
   const onMouseMove = (e: React.MouseEvent) => {
@@ -645,6 +653,7 @@ export default function GalaxyCanvas() {
 
   const onMouseUp = (e: React.MouseEvent) => {
     const c = canvasRef.current;
+    if (e.button !== 0) return;   // selection only on left-click
     if (!c || !currentGame) { dragRef.current = null; return; }
 
     const moved = dragRef.current
@@ -707,6 +716,7 @@ export default function GalaxyCanvas() {
         onMouseMove={onMouseMove}
         onMouseUp={onMouseUp}
         onMouseLeave={onMouseLeave}
+        onContextMenu={onContextMenu}
         onWheel={onWheel}
       />
       {selFleet && (

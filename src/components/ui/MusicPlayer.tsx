@@ -34,11 +34,21 @@ export default function MusicPlayer() {
     a.play().then(() => setPlaying(true)).catch(() => setPlaying(false));
   }, [vol]);
 
-  // Start the soundtrack as soon as the player enters the game. Browsers block
-  // autoplay-with-sound until a gesture, so also kick off on the first
-  // interaction anywhere (unless the player has explicitly paused).
+  // Play whenever the track changes (unless explicitly paused). This effect runs
+  // AFTER React commits the new <audio src>, so it always plays the right track —
+  // which is what makes auto-advance on track end reliable.
   useEffect(() => {
-    playCurrent();
+    if (userPaused.current) return;
+    const a = audioRef.current;
+    if (!a) return;
+    a.volume = vol;
+    a.play().then(() => setPlaying(true)).catch(() => setPlaying(false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [idx]);
+
+  // Browsers block autoplay-with-sound until a gesture, so kick playback off on
+  // the first interaction anywhere (unless the player has paused on purpose).
+  useEffect(() => {
     const kick = () => {
       const a = audioRef.current;
       if (a && a.paused && !userPaused.current) playCurrent();
@@ -49,15 +59,10 @@ export default function MusicPlayer() {
       window.removeEventListener('pointerdown', kick);
       window.removeEventListener('keydown', kick);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [playCurrent]);
 
-  const goTo = (i: number) => {
-    userPaused.current = false;
-    setIdx(i);
-    setTimeout(playCurrent, 0); // src updates on re-render; play next tick
-  };
-  const next = useCallback(() => goTo((idx + 1) % TRACKS.length), [idx]);
+  const goTo = (i: number) => { userPaused.current = false; setIdx(i); }; // effect plays it
+  const advance = () => goTo((idx + 1) % TRACKS.length);                  // also used on track end
   const prev = () => goTo((idx - 1 + TRACKS.length) % TRACKS.length);
 
   const toggle = () => {
@@ -71,7 +76,7 @@ export default function MusicPlayer() {
 
   return (
     <div className="absolute top-2 right-2 z-30 font-mono select-none flex flex-col items-end gap-1">
-      <audio ref={audioRef} src={track.file} onEnded={next} preload="auto" />
+      <audio ref={audioRef} src={track.file} onEnded={advance} preload="auto" />
 
       {/* Always-visible compact transport bar */}
       <div className="pixel-panel flex items-center gap-1 px-1.5 py-1" style={{ borderColor: '#2a3a6a' }}>
@@ -79,7 +84,7 @@ export default function MusicPlayer() {
         <span className="text-[#8aa8d0] text-[8px] w-24 truncate" title={track.title}>{track.title}</span>
         <button onClick={prev}   title="Previous" className="btn-gray text-[9px] px-1.5 py-0.5">⏮</button>
         <button onClick={toggle} title={playing ? 'Pause' : 'Play'} className="btn-cyan text-[9px] px-2 py-0.5">{playing ? '⏸' : '►'}</button>
-        <button onClick={next}   title="Next" className="btn-gray text-[9px] px-1.5 py-0.5">⏭</button>
+        <button onClick={advance} title="Next" className="btn-gray text-[9px] px-1.5 py-0.5">⏭</button>
         <button onClick={() => setOpen(o => !o)} title="Tracklist" className="text-[#3a5a6a] hover:text-[#6a8aa0] text-[10px] px-1">{open ? '▴' : '▾'}</button>
       </div>
 
