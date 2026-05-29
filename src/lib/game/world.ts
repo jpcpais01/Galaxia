@@ -1,5 +1,6 @@
 import type { Empire, GameMeta, Resources, GameEvent, AssemblyVote, GalaxyData } from '@/types/game';
 import { ANOMALY_EFFECTS } from './constants';
+import { getResearchBonuses } from './economy';
 
 // ════════════════════════════════════════════════════════════════════════════
 //  SENSOR VISION — fleets and sensors reveal the fog of war
@@ -22,6 +23,16 @@ export function computeSensorReveals(empire: Empire, galaxy: GalaxyData): string
     if (!o.active || o.type !== 'orbital_sensor') continue;
     reveal.add(o.systemId);
     for (const c of (sysById.get(o.systemId)?.connections ?? [])) reveal.add(c);
+  }
+
+  // Sensor-range research (e.g. Basic/Tachyon Sensors) passively scans the
+  // systems bordering your territory.
+  const sensorTier = getResearchBonuses(empire, 'ship_stat')['sensorRange'] ?? 0;
+  if (sensorTier > 0) {
+    for (const sysId of empire.controlledSystems) {
+      reveal.add(sysId);
+      for (const c of (sysById.get(sysId)?.connections ?? [])) reveal.add(c);
+    }
   }
   return Array.from(reveal);
 }

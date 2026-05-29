@@ -1,6 +1,6 @@
 'use client';
 import { useGameStore } from '@/store/game-store';
-import { RESEARCH_BY_PATH } from '@/lib/game/research-tree';
+import { RESEARCH_BY_PATH, RESEARCH_BY_ID, describeEffects } from '@/lib/game/research-tree';
 import { PixelIcon } from '@/components/ui/PixelIcon';
 import type { ResearchPath } from '@/types/game';
 
@@ -26,18 +26,22 @@ export default function ResearchPanel() {
         <button onClick={() => setPanel('none')} className="text-[#3a5a6a] hover:text-[#6a8aa0]">✕</button>
       </div>
 
-      {researchQueue && (
-        <div className="px-3 py-2 bg-[#0a0a1a] border-b border-[#1a1a3a]">
-          <div className="font-pixel text-[8px] text-[#8888ff] mb-1">RESEARCHING</div>
-          <div className="font-mono text-[10px] text-[#c0d0e0]">{researchQueue}</div>
-          <div className="mt-1 h-1.5 bg-[#050510]">
-            <div
-              className="h-full bg-[#4488ff] transition-all"
-              style={{ width: `${Math.min(100, researchProgress)}%` }}
-            />
+      {researchQueue && (() => {
+        const qn = RESEARCH_BY_ID[researchQueue];
+        const pct = qn ? Math.min(100, Math.round((researchProgress / qn.costResearch) * 100)) : 0;
+        return (
+          <div className="px-3 py-2 bg-[#0a0a1a] border-b border-[#1a1a3a]">
+            <div className="font-pixel text-[8px] text-[#8888ff] mb-1">RESEARCHING</div>
+            <div className="flex justify-between items-baseline">
+              <span className="font-mono text-[10px] text-[#c0d0e0]">{qn?.name ?? researchQueue}</span>
+              <span className="font-mono text-[8px] text-[#5a6a9a]">{Math.floor(researchProgress)}/{qn?.costResearch ?? '?'} · {pct}%</span>
+            </div>
+            <div className="mt-1 h-1.5 bg-[#050510]">
+              <div className="h-full bg-[#4488ff] transition-all" style={{ width: `${pct}%` }} />
+            </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       <div className="flex-1 scrollable">
         {PATHS.map(path => {
@@ -56,7 +60,9 @@ export default function ResearchPanel() {
                   const active = researchQueue === node.id;
                   const prereqsMet = node.prerequisites.every(p => completedResearch.includes(p));
                   const canResearch = !done && !researchQueue && prereqsMet;
-                  const affordable = (myEmpire.resources.research ?? 0) >= node.costResearch;
+                  const computeOk = (node.costCompute ?? 0) === 0 || (myEmpire.resources.compute ?? 0) >= node.costCompute;
+                  const affordable = (myEmpire.resources.research ?? 0) >= node.costResearch && computeOk;
+                  const effects = describeEffects(node);
 
                   return (
                     <button
@@ -89,12 +95,19 @@ export default function ResearchPanel() {
                         <div className="font-mono text-[9px] text-[#2a4a5a] mt-0.5">
                           {node.description}
                         </div>
+                        {effects.length > 0 && (
+                          <div className="font-mono text-[8px] text-[#3a7a5a] mt-0.5">
+                            {effects.join(' · ')}
+                          </div>
+                        )}
                         {!done && (
                           <div className="font-mono text-[9px] text-[#1a3a4a] mt-0.5">
-                            Cost: <span className={affordable ? 'text-[#4488ff]' : 'text-[#ff4455]'}>
+                            Cost: <span className={(myEmpire.resources.research ?? 0) >= node.costResearch ? 'text-[#4488ff]' : 'text-[#ff4455]'}>
                               {node.costResearch}rp
                             </span>
-                            {node.costCompute > 0 && ` • ${node.costCompute}cpu`}
+                            {node.costCompute > 0 && (
+                              <span className={computeOk ? 'text-[#aa66ff]' : 'text-[#ff4455]'}> • {node.costCompute}cpu</span>
+                            )}
                           </div>
                         )}
                       </div>

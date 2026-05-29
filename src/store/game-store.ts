@@ -13,8 +13,9 @@ import type {
 } from '@/types/game';
 import { generateGalaxy, findHomeSystem, findPath, systemDistance } from '@/lib/game/galaxy-generator';
 import { createBotEmpire, runBotTurn } from '@/lib/game/bot-ai';
-import { applyTick, canAfford, deductCosts, countUsedSlots } from '@/lib/game/economy';
+import { applyTick, canAfford, deductCosts, countUsedSlots, buildTicksFor } from '@/lib/game/economy';
 import { resolveAssembly, checkVictory, resolveContacts, computeSensorReveals, ANOMALY_GRANTS } from '@/lib/game/world';
+import { RESEARCH_BY_ID } from '@/lib/game/research-tree';
 import { ANOMALY_EFFECTS } from '@/lib/game/constants';
 import { INFRA_CONFIG, STATION_CONFIG, GROUND_OP_CONFIG, ORBITAL_CONFIG, INFRA_RESEARCH_REQUIRED, EMPIRE_COLORS, STARTING_RESOURCES, GAME_TICK_MS, SYSTEM_COUNT } from '@/lib/game/constants';
 import { STARTER_DESIGNS, instantiateShip } from '@/lib/game/ship-designer';
@@ -448,7 +449,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       level: 1,
       ownerId: myEmpire.id,
       buildStartedTick: currentGame.tick,
-      buildCompletedTick: currentGame.tick + cfg.buildTicks,
+      buildCompletedTick: currentGame.tick + buildTicksFor(myEmpire, 'station', cfg.buildTicks),
       hp: cfg.hp,
       maxHp: cfg.hp,
     };
@@ -638,7 +639,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       id: `infra_${Date.now()}`,
       type, level: 1, planetId, systemId,
       buildStartedTick: currentGame.tick,
-      buildCompletedTick: currentGame.tick + cfg.buildTicks,
+      buildCompletedTick: currentGame.tick + buildTicksFor(myEmpire, 'infrastructure', cfg.buildTicks),
       active: false,
     };
 
@@ -664,7 +665,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       id: `gop_${Date.now()}`,
       type, targetId, systemId,
       buildStartedTick: currentGame.tick,
-      buildCompletedTick: currentGame.tick + cfg.buildTicks,
+      buildCompletedTick: currentGame.tick + buildTicksFor(myEmpire, 'infrastructure', cfg.buildTicks),
       active: false,
     };
 
@@ -698,9 +699,16 @@ export const useGameStore = create<GameStore>((set, get) => ({
     if (myEmpire.researchQueue) return;
     if (myEmpire.completedResearch.includes(nodeId)) return;
 
+    const node = RESEARCH_BY_ID[nodeId];
+    if (!node) return;
+    if (!node.prerequisites.every(p => myEmpire.completedResearch.includes(p))) return;
+    // Advanced research needs a compute stockpile to begin (one-time setup cost)
+    if ((node.costCompute ?? 0) > 0 && (myEmpire.resources.compute ?? 0) < node.costCompute) return;
+
     await updateDoc(doc(db, 'games', currentGame.id, 'empires', myEmpire.id), {
       researchQueue: nodeId,
       researchProgress: 0,
+      resources: { ...myEmpire.resources, compute: Math.max(0, (myEmpire.resources.compute ?? 0) - (node.costCompute ?? 0)) },
     });
   },
 
@@ -992,7 +1000,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       id: `orb_${Date.now()}`,
       type, planetId, systemId,
       buildStartedTick: currentGame.tick,
-      buildCompletedTick: currentGame.tick + cfg.buildTicks,
+      buildCompletedTick: currentGame.tick + buildTicksFor(myEmpire, 'station', cfg.buildTicks),
       active: false,
       hp: cfg.hp,
       maxHp: cfg.hp,

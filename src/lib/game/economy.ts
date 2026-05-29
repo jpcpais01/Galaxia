@@ -253,6 +253,11 @@ export function getBuildSpeedMultiplier(empire: Empire, category: 'infrastructur
   return mult;
 }
 
+// Build duration after research/civ build-speed bonuses (min 1 tick).
+export function buildTicksFor(empire: Empire, category: 'infrastructure' | 'station' | 'ship', base: number): number {
+  return Math.max(1, Math.round(base / getBuildSpeedMultiplier(empire, category)));
+}
+
 export function applyTick(empire: Empire, currentTick: number): Partial<Empire> {
   const rates = computeResourceRates(empire, currentTick);
   const newResources = { ...empire.resources };

@@ -3,8 +3,8 @@ import type {
 } from '@/types/game';
 import { SeededRandom } from '@/lib/noise';
 import { INFRA_CONFIG, STATION_CONFIG, ORBITAL_CONFIG, GROUND_OP_CONFIG, TILE_CONFIG, EMPIRE_COLORS, STARTING_RESOURCES } from './constants';
-import { canAfford, deductCosts, countUsedSlots } from './economy';
-import { RESEARCH_TREE } from './research-tree';
+import { canAfford, deductCosts, countUsedSlots, buildTicksFor } from './economy';
+import { RESEARCH_TREE, RESEARCH_BY_ID } from './research-tree';
 import { instantiateShip, calcDesignStats } from './ship-designer';
 import { findPath } from './galaxy-generator';
 
@@ -87,11 +87,12 @@ function chooseInfra(empire: Empire): InfraType {
   return empire.completedResearch.includes('ai_1') ? 'ai_datacenter' : 'research_lab';
 }
 
-/** First research node whose prerequisites are met and isn't done yet (cheapest). */
+/** Cheapest researchable node: prereqs met, not done, and compute cost affordable. */
 function nextResearch(empire: Empire): string | null {
   const done = new Set(empire.completedResearch);
+  const compute = empire.resources.compute ?? 0;
   const candidates = RESEARCH_TREE
-    .filter(n => !done.has(n.id) && n.prerequisites.every(p => done.has(p)))
+    .filter(n => !done.has(n.id) && n.prerequisites.every(p => done.has(p)) && (n.costCompute ?? 0) <= compute)
     .sort((a, b) => a.costResearch - b.costResearch);
   return candidates[0]?.id ?? null;
 }
@@ -161,7 +162,7 @@ export function runBotTurn(empire: Empire, game: GameMeta, tick: number, allEmpi
         Object.assign(r, deductCosts(r, cfg)); touched.resources = true;
         stations.push({
           id: `stn_${tick}_${empire.id}`, type: 'space_station', systemId: empire.homeSystemId,
-          level: 1, ownerId: empire.id, buildStartedTick: tick, buildCompletedTick: tick + cfg.buildTicks,
+          level: 1, ownerId: empire.id, buildStartedTick: tick, buildCompletedTick: tick + buildTicksFor(empire, 'station', cfg.buildTicks),
           hp: cfg.hp, maxHp: cfg.hp,
         });
         touched.stations = true;
@@ -170,10 +171,14 @@ export function runBotTurn(empire: Empire, game: GameMeta, tick: number, allEmpi
     }
   }
 
-  // 1. Research
+  // 1. Research (pay the one-time compute setup cost)
   if (!researchQueue) {
-    const node = nextResearch(empire);
-    if (node) { researchQueue = node; researchProgress = 0; touched.research = true; }
+    const nodeId = nextResearch({ ...empire, resources: r });
+    const node = nodeId ? RESEARCH_BY_ID[nodeId] : null;
+    if (node) {
+      researchQueue = node.id; researchProgress = 0; touched.research = true;
+      if ((node.costCompute ?? 0) > 0) { r.compute -= node.costCompute; touched.resources = true; }
+    }
   }
 
   // 1b. Investigate an anomaly in surveyed space (host applies fallback grants)
@@ -218,7 +223,7 @@ export function runBotTurn(empire: Empire, game: GameMeta, tick: number, allEmpi
           infra.push({
             id: `infra_${tick}_${empire.id}_${infra.length}`, type, level: 1,
             planetId: planet.id, systemId: sysId,
-            buildStartedTick: tick, buildCompletedTick: tick + cfg.buildTicks, active: false,
+            buildStartedTick: tick, buildCompletedTick: tick + buildTicksFor(empire, 'infrastructure', cfg.buildTicks), active: false,
           });
           touched.infra = true;
           break;
@@ -257,7 +262,7 @@ export function runBotTurn(empire: Empire, game: GameMeta, tick: number, allEmpi
         groundOps.push({
           id: `gop_${tick}_${empire.id}_${groundOps.length}`,
           type: opType, targetId, systemId: sysId,
-          buildStartedTick: tick, buildCompletedTick: tick + cfg.buildTicks, active: false,
+          buildStartedTick: tick, buildCompletedTick: tick + buildTicksFor(empire, 'infrastructure', cfg.buildTicks), active: false,
         });
         touched.groundOps = true;
         break outerGo;
@@ -277,7 +282,7 @@ export function runBotTurn(empire: Empire, game: GameMeta, tick: number, allEmpi
       const sid = `stn_${tick}_${empire.id}_${stations.length}`;
       stations.push({
         id: sid, type: stationType, systemId: claim, level: 1, ownerId: empire.id,
-        buildStartedTick: tick, buildCompletedTick: tick + cfg.buildTicks, hp: cfg.hp, maxHp: cfg.hp,
+        buildStartedTick: tick, buildCompletedTick: tick + buildTicksFor(empire, 'station', cfg.buildTicks), hp: cfg.hp, maxHp: cfg.hp,
       });
       touched.stations = true;
       ssw.push({ path: `systemStates.${claim}.stationId`, value: sid });
@@ -299,7 +304,7 @@ export function runBotTurn(empire: Empire, game: GameMeta, tick: number, allEmpi
         orbitals.push({
           id: `orb_${tick}_${empire.id}_${orbitals.length}`,
           type: orbType, planetId: planet.id, systemId: sysId,
-          buildStartedTick: tick, buildCompletedTick: tick + cfg.buildTicks,
+          buildStartedTick: tick, buildCompletedTick: tick + buildTicksFor(empire, 'station', cfg.buildTicks),
           active: false, hp: cfg.hp, maxHp: cfg.hp,
         });
         touched.orbitals = true;

@@ -1,6 +1,6 @@
 import type { ShipDesign, ShipTile, ShipTileType, Empire, Ship } from '@/types/game';
 import { TILE_CONFIG } from './constants';
-import { getResearchBonuses } from './economy';
+import { getResearchBonuses, buildTicksFor } from './economy';
 
 export const GRID_SIZE = 8;
 
@@ -20,6 +20,7 @@ export function instantiateShip(
   atkMult += (rs['attack']  ?? 0) / 100;
   defMult += (rs['defense'] ?? 0) / 100;
   spdMult += (rs['speed']   ?? 0) / 100;
+  hpMult  += (rs['hp']      ?? 0) / 100;
 
   // Civilization bonuses
   const civ = empire.civilization;
@@ -49,7 +50,7 @@ export function instantiateShip(
     defense: Math.round(design.defense * defMult),
     speed:   Math.max(1, Math.round(design.speed * spdMult)),
     tiles: design.tiles.map(t => ({ ...t })),
-    buildCompletedTick: tick + design.buildTicks,
+    buildCompletedTick: tick + buildTicksFor(empire, 'ship', design.buildTicks),
   };
 }
 
