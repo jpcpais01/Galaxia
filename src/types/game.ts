@@ -448,7 +448,7 @@ export interface UIState {
   selectedSystemId: string | null;
   selectedPlanetId: string | null;
   selectedFleetId: string | null;
-  activePanel: 'none' | 'build' | 'research' | 'ships' | 'diplomacy' | 'assembly' | 'designer' | 'colonies' | 'fleets';
+  activePanel: 'none' | 'build' | 'research' | 'ships' | 'diplomacy' | 'assembly' | 'designer' | 'colonies' | 'fleets' | 'anomalies';
   hoverSystemId: string | null;
   cameraX: number;
   cameraY: number;

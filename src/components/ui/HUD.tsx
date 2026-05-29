@@ -11,6 +11,7 @@ import ShipDesigner from './ShipDesigner';
 import AssemblyPanel from './AssemblyPanel';
 import ColoniesPanel from './ColoniesPanel';
 import FleetPanel from './FleetPanel';
+import AnomaliesPanel from './AnomaliesPanel';
 import MusicPlayer from './MusicPlayer';
 
 import { useRouter } from 'next/navigation';
@@ -65,6 +66,7 @@ function TopBar() {
         {navBtn('ships',      'SHIPS',  '#44aaff')}
         {navBtn('fleets',     'FLEET',  '#00ddff')}
         {navBtn('designer',   'DESIGN', '#ff8844')}
+        {navBtn('anomalies',  'ANOM',   '#ff8800')}
         {navBtn('diplomacy',  'DIPL',   '#ffaa00')}
         {navBtn('assembly',   'ASMBL',  '#00ff88')}
         <button onClick={leave} className="btn-gray text-[8px] px-2 py-1 ml-1">EXIT</button>
@@ -190,6 +192,7 @@ export default function HUD({ children }: { children: React.ReactNode }) {
       case 'ships':     return <ShipFleetPanel />;
       case 'fleets':    return <FleetPanel />;
       case 'designer':  return <ShipDesigner />;
+      case 'anomalies': return <AnomaliesPanel />;
       case 'diplomacy': return <DiplomacyPanel />;
       case 'assembly':  return <AssemblyPanel />;
       case 'build':     return <BuildMenu />;
