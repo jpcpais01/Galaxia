@@ -1037,12 +1037,21 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const empiresAfterTick: Record<string, Empire> = {};
     const eventsToEmit: GameEvent[] = [];
 
-    // All Firestore writes for this tick are accumulated and committed in
-    // batched chunks at the end — far fewer round-trips than serial updateDocs.
-    type WriteOp = { kind: 'update' | 'set'; ref: ReturnType<typeof doc>; data: Record<string, unknown> };
-    const writes: WriteOp[] = [];
-    const pushUpdate = (ref: ReturnType<typeof doc>, data: Record<string, unknown>) => writes.push({ kind: 'update', ref, data });
+    // All Firestore writes for this tick are coalesced PER DOCUMENT and committed
+    // in batched chunks — far fewer round-trips, and (critically) a writeBatch may
+    // not contain two writes to the same document, so each doc must be written once.
     const empireRef = (id: string) => doc(db, 'games', currentGame.id, 'empires', id);
+    const empirePatch = new Map<string, Record<string, unknown>>();
+    const gamePatch: Record<string, unknown> = {};
+    const surveyAccum = new Map<string, Set<string>>(); // systemId → empireIds (folded into one arrayUnion)
+    const mergeEmpire = (id: string, data: Record<string, unknown>) =>
+      empirePatch.set(id, { ...(empirePatch.get(id) ?? {}), ...data });
+    const mergeGame = (data: Record<string, unknown>) => Object.assign(gamePatch, data);
+    const addSurvey = (sysId: string, eid: string) => {
+      const s = surveyAccum.get(sysId) ?? new Set<string>();
+      s.add(eid);
+      surveyAccum.set(sysId, s);
+    };
 
     for (const empire of empires) {
       const updates = applyTick(empire, newTick);
@@ -1122,7 +1131,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       empiresAfterTick[empire.id] = merged;
 
       // ── Single empire write (accumulated) ─────────────────────────────────
-      pushUpdate(empireRef(empire.id), {
+      mergeEmpire(empire.id, {
         resources:            merged.resources,
         resourceRates:        merged.resourceRates,
         infrastructure:       merged.infrastructure,
@@ -1146,15 +1155,11 @@ export const useGameStore = create<GameStore>((set, get) => ({
       });
 
       // ── Game-doc systemState writes ───────────────────────────────────────
-      for (const sysId of newlySurveyed) {
-        pushUpdate(gameRef, { [`systemStates.${sysId}.surveyedBy`]: arrayUnion(empire.id) });
-      }
-      for (const stn of newlyBuilt) {
-        pushUpdate(gameRef, { [`systemStates.${stn.systemId}.ownerId`]: empire.id });
-      }
+      for (const sysId of newlySurveyed) addSurvey(sysId, empire.id);
+      for (const stn of newlyBuilt) mergeGame({ [`systemStates.${stn.systemId}.ownerId`]: empire.id });
       for (const w of botSSW) {
-        const value = w.value === 'ARRAY_UNION' ? arrayUnion(empire.id) : w.value;
-        pushUpdate(gameRef, { [w.path]: value });
+        if (w.value === 'ARRAY_UNION') addSurvey(w.path.split('.')[1], empire.id);
+        else mergeGame({ [w.path]: w.value });
       }
     }
 
@@ -1178,7 +1183,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
             otherDip.push({ empireId: bot.id, status, tradeDeals: [] });
           }
           other.diplomacy = otherDip;
-          pushUpdate(empireRef(other.id), { diplomacy: otherDip });
+          mergeEmpire(other.id, { diplomacy: otherDip });
         }
         eventsToEmit.push({
           id: `evt_${newTick}_dipacc_${bot.id}_${rel.empireId}`,
@@ -1188,7 +1193,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
         });
       }
       bot.diplomacy = myDip;
-      pushUpdate(empireRef(bot.id), { diplomacy: myDip });
+      mergeEmpire(bot.id, { diplomacy: myDip });
     }
 
     // ─── Combat resolution (one simultaneous round per tick) ──────────────────
@@ -1203,7 +1208,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       };
       if (deltas.controlledChanged.has(empireId)) patch.controlledSystems = deltas.controlledUpdates[empireId];
       if (deltas.colonizedChanged.has(empireId))  patch.colonizedPlanets  = deltas.colonizedUpdates[empireId];
-      pushUpdate(empireRef(empireId), patch);
+      mergeEmpire(empireId, patch);
 
       // Reflect combat results in the in-memory snapshot for assembly/victory
       const e = empiresAfterTick[empireId];
@@ -1218,7 +1223,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     }
 
     for (const sysId of deltas.ownershipCleared) {
-      pushUpdate(gameRef, {
+      mergeGame({
         [`systemStates.${sysId}.ownerId`]: null,
         [`systemStates.${sysId}.stationId`]: null,
       });
@@ -1241,7 +1246,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const assembly = resolveAssembly(Object.values(empiresAfterTick), { ...currentGame, assembly: assemblyState }, newTick);
     const finalAssembly = assembly.changed ? assembly.updatedAssembly : assemblyState;
     if (assembly.changed || assemblyDirty) {
-      pushUpdate(gameRef, { assembly: finalAssembly });
+      mergeGame({ assembly: finalAssembly });
     }
     if (assembly.changed) {
       for (const [eid, grant] of Object.entries(assembly.grants)) {
@@ -1250,14 +1255,14 @@ export const useGameStore = create<GameStore>((set, get) => ({
         const res = { ...e.resources };
         for (const [k, v] of Object.entries(grant) as [keyof Resources, number][]) res[k] = (res[k] ?? 0) + v;
         e.resources = res;
-        pushUpdate(empireRef(eid), { resources: res });
+        mergeEmpire(eid, { resources: res });
       }
       for (const eid of Array.from(assembly.peaceEmpireIds)) {
         const e = empiresAfterTick[eid];
         if (!e || !(e.diplomacy ?? []).some(d => d.status === 'at_war')) continue;
         const dip = e.diplomacy.map(d => d.status === 'at_war' ? { ...d, status: 'neutral' as const } : d);
         e.diplomacy = dip;
-        pushUpdate(empireRef(eid), { diplomacy: dip });
+        mergeEmpire(eid, { diplomacy: dip });
       }
       eventsToEmit.push(...assembly.events);
     }
@@ -1265,7 +1270,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     // ─── Victory check ────────────────────────────────────────────────────────
     const vic = checkVictory(Object.values(empiresAfterTick), { ...currentGame, tick: newTick }, newTick);
     if (vic) {
-      pushUpdate(gameRef, {
+      mergeGame({
         status: 'finished',
         winnerId: vic.winnerId,
         winnerName: vic.winnerName,
@@ -1279,17 +1284,40 @@ export const useGameStore = create<GameStore>((set, get) => ({
       });
     }
 
-    // ─── Commit everything in batched chunks (few round-trips) ────────────────
-    for (const evt of eventsToEmit) {
-      writes.push({ kind: 'set', ref: doc(collection(db, 'games', currentGame.id, 'events')), data: evt as unknown as Record<string, unknown> });
+    // ─── Build the final op list: one write per document ──────────────────────
+    for (const [sysId, ids] of Array.from(surveyAccum.entries())) {
+      mergeGame({ [`systemStates.${sysId}.surveyedBy`]: arrayUnion(...Array.from(ids)) });
     }
-    for (let i = 0; i < writes.length; i += 400) {
-      const batch = writeBatch(db);
-      for (const op of writes.slice(i, i + 400)) {
-        if (op.kind === 'set') batch.set(op.ref, op.data);
-        else batch.update(op.ref, op.data);
+    type WriteOp = { kind: 'update' | 'set'; ref: ReturnType<typeof doc>; data: Record<string, unknown> };
+    const ops: WriteOp[] = [];
+    for (const [id, data] of Array.from(empirePatch.entries())) ops.push({ kind: 'update', ref: empireRef(id), data });
+    if (Object.keys(gamePatch).length > 0) ops.push({ kind: 'update', ref: gameRef, data: gamePatch });
+    for (const evt of eventsToEmit) {
+      ops.push({ kind: 'set', ref: doc(collection(db, 'games', currentGame.id, 'events')), data: evt as unknown as Record<string, unknown> });
+    }
+
+    // Commit in chunks; if a batch fails, fall back to individual writes so a
+    // single bad op can never freeze the whole tick.
+    for (let i = 0; i < ops.length; i += 400) {
+      const chunk = ops.slice(i, i + 400);
+      try {
+        const batch = writeBatch(db);
+        for (const op of chunk) {
+          if (op.kind === 'set') batch.set(op.ref, op.data);
+          else batch.update(op.ref, op.data);
+        }
+        await batch.commit();
+      } catch (err) {
+        console.error('[processTick] batch commit failed, falling back to individual writes', err);
+        for (const op of chunk) {
+          try {
+            if (op.kind === 'set') await setDoc(op.ref, op.data);
+            else await updateDoc(op.ref, op.data);
+          } catch (e2) {
+            console.error('[processTick] individual write failed', e2);
+          }
+        }
       }
-      await batch.commit();
     }
   },
 }));
