@@ -1,5 +1,30 @@
-import type { Empire, GameMeta, Resources, GameEvent, AssemblyVote } from '@/types/game';
+import type { Empire, GameMeta, Resources, GameEvent, AssemblyVote, GalaxyData } from '@/types/game';
 import { ANOMALY_EFFECTS } from './constants';
+
+// ════════════════════════════════════════════════════════════════════════════
+//  SENSOR VISION — fleets and sensors reveal the fog of war
+// ════════════════════════════════════════════════════════════════════════════
+
+// Systems an empire reveals this tick: any system it has a (non-transit) fleet in,
+// plus systems adjacent to sensor-equipped fleets and active orbital sensors.
+export function computeSensorReveals(empire: Empire, galaxy: GalaxyData): string[] {
+  const reveal = new Set<string>();
+  const sysById = new Map(galaxy.systems.map(s => [s.id, s] as const));
+  const shipById = new Map((empire.ships ?? []).map(s => [s.id, s] as const));
+
+  for (const f of (empire.fleets ?? [])) {
+    if (f.state === 'in_transit') continue;
+    reveal.add(f.systemId);
+    const hasSensor = f.shipIds.some(id => (shipById.get(id)?.tiles ?? []).some(t => t.type === 'sensor_array'));
+    if (hasSensor) for (const c of (sysById.get(f.systemId)?.connections ?? [])) reveal.add(c);
+  }
+  for (const o of (empire.orbitalStructures ?? [])) {
+    if (!o.active || o.type !== 'orbital_sensor') continue;
+    reveal.add(o.systemId);
+    for (const c of (sysById.get(o.systemId)?.connections ?? [])) reveal.add(c);
+  }
+  return Array.from(reveal);
+}
 
 // ════════════════════════════════════════════════════════════════════════════
 //  ANOMALIES — investigated when an empire first surveys the system they're in

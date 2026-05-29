@@ -14,7 +14,7 @@ import type {
 import { generateGalaxy, findHomeSystem, findPath, systemDistance } from '@/lib/game/galaxy-generator';
 import { createBotEmpire, runBotTurn } from '@/lib/game/bot-ai';
 import { applyTick, canAfford, deductCosts, countUsedSlots } from '@/lib/game/economy';
-import { resolveAssembly, checkVictory, resolveContacts, ANOMALY_GRANTS } from '@/lib/game/world';
+import { resolveAssembly, checkVictory, resolveContacts, computeSensorReveals, ANOMALY_GRANTS } from '@/lib/game/world';
 import { ANOMALY_EFFECTS } from '@/lib/game/constants';
 import { INFRA_CONFIG, STATION_CONFIG, GROUND_OP_CONFIG, ORBITAL_CONFIG, INFRA_RESEARCH_REQUIRED, EMPIRE_COLORS, STARTING_RESOURCES, GAME_TICK_MS, SYSTEM_COUNT } from '@/lib/game/constants';
 import { STARTER_DESIGNS, instantiateShip } from '@/lib/game/ship-designer';
@@ -1135,6 +1135,14 @@ export const useGameStore = create<GameStore>((set, get) => ({
         merged = { ...merged, ...res.patch } as Empire;
         eventsToEmit.push(...res.events);
         botSSW.push(...res.systemStateWrites);
+      }
+
+      // ── Sensor vision: fleets/sensors reveal fog (added to surveyedSystems) ──
+      const reveals = computeSensorReveals(merged, galaxy);
+      const newlyRevealed = reveals.filter(s => !merged.surveyedSystems.includes(s));
+      if (newlyRevealed.length > 0) {
+        merged.surveyedSystems = Array.from(new Set([...merged.surveyedSystems, ...newlyRevealed]));
+        for (const s of newlyRevealed) addSurvey(s, empire.id);
       }
 
       empiresAfterTick[empire.id] = merged;

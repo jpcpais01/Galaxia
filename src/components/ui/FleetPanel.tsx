@@ -21,6 +21,7 @@ export default function FleetPanel() {
   const ships = myEmpire.ships ?? [];
   const fleets = myEmpire.fleets ?? [];
   const tick = currentGame.tick;
+  const sysName = (id?: string) => (id ? currentGame.galaxy.systems.find(s => s.id === id)?.name ?? id : '—');
 
   const selectedFleet = fleets.find(f => f.id === ui.selectedFleetId);
 
@@ -138,7 +139,7 @@ export default function FleetPanel() {
                     ATK {ship.attack} · DEF {ship.defense} · SPD {ship.speed}
                   </div>
                   <div className="font-mono text-[9px] text-[#2a3a4a] flex justify-between">
-                    <span>@ {ship.systemId}</span>
+                    <span>@ {sysName(ship.systemId)}</span>
                     {building && <span className="text-[#aa8800]">BUILDING {ship.buildCompletedTick! - tick}t</span>}
                     {inFleet && <span className="text-[#44aaff]">in {inFleet.name}</span>}
                   </div>
@@ -199,10 +200,10 @@ export default function FleetPanel() {
                       onClick={(e) => { e.stopPropagation(); goToFleetSystem(fleet.systemId); }}
                       className="text-[#44aaff] hover:underline"
                     >
-                      @ {fleet.systemId}
+                      @ {sysName(fleet.systemId)}
                     </button>
                     {fleet.state === 'in_transit' && (
-                      <span className="text-[#aa8800]">→ {fleet.transitToSystemId} ({Math.round((fleet.transitProgress ?? 0) * 100)}%)</span>
+                      <span className="text-[#aa8800]">→ {sysName(fleet.transitToSystemId)} ({Math.round((fleet.transitProgress ?? 0) * 100)}%)</span>
                     )}
                   </div>
                 </div>
@@ -245,7 +246,7 @@ export default function FleetPanel() {
                           onClick={() => moveFleet(selectedFleet.id, sid)}
                           className="btn-gray text-[8px] py-0.5 px-1.5"
                         >
-                          → {sid.slice(0, 8)}
+                          → {sysName(sid)}
                         </button>
                       ))}
                   </div>

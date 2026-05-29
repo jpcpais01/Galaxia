@@ -1,12 +1,35 @@
 import type {
-  Empire, GameMeta, ShipDesign, GameEvent, Resources, InfraType,
+  Empire, GameMeta, ShipDesign, ShipTile, ShipTileType, GameEvent, Resources, InfraType, StationType, GroundOpType,
 } from '@/types/game';
 import { SeededRandom } from '@/lib/noise';
-import { INFRA_CONFIG, STATION_CONFIG, ORBITAL_CONFIG, EMPIRE_COLORS, STARTING_RESOURCES } from './constants';
+import { INFRA_CONFIG, STATION_CONFIG, ORBITAL_CONFIG, GROUND_OP_CONFIG, TILE_CONFIG, EMPIRE_COLORS, STARTING_RESOURCES } from './constants';
 import { canAfford, deductCosts, countUsedSlots } from './economy';
 import { RESEARCH_TREE } from './research-tree';
-import { instantiateShip } from './ship-designer';
+import { instantiateShip, calcDesignStats } from './ship-designer';
 import { findPath } from './galaxy-generator';
+
+// ─── Bot ship designs — a mix of damage/resist types so fleets can't be hard-
+//     countered by a single defensive choice. ──────────────────────────────────
+function botDesign(id: string, name: string, layout: [ShipTileType, number, number][]): ShipDesign {
+  const tiles: ShipTile[] = layout.map(([type, x, y]) => ({ type, x, y, hp: TILE_CONFIG[type].hp, maxHp: TILE_CONFIG[type].hp }));
+  const s = calcDesignStats(tiles);
+  return {
+    id, name, tiles,
+    attack: s.attack, defense: s.defense, speed: s.speed,
+    mineralCost: s.mineralCost, energyCost: s.energyCost, creditCost: s.creditCost, buildTicks: s.buildTicks,
+  };
+}
+
+const BOT_DESIGNS_BASE: ShipDesign[] = [
+  botDesign('bot_striker', 'Striker', [['cockpit', 1, 0], ['laser_cannon', 0, 1], ['laser_cannon', 2, 1], ['shield_generator', 1, 1], ['thruster', 1, 2]]),       // energy dmg / energy resist
+  botDesign('bot_raider',  'Raider',  [['cockpit', 1, 0], ['missile_launcher', 0, 1], ['missile_launcher', 2, 1], ['armor_plate', 1, 1], ['thruster', 1, 2]]),     // explosive dmg / kinetic resist
+  botDesign('bot_warden',  'Warden',  [['cockpit', 1, 0], ['laser_cannon', 0, 1], ['missile_launcher', 2, 1], ['shield_generator', 1, 1], ['armor_plate', 0, 2], ['thruster', 2, 2]]), // mixed
+];
+const BOT_DESIGN_KINETIC = botDesign('bot_breaker', 'Breaker', [['cockpit', 1, 0], ['railgun', 0, 1], ['railgun', 2, 1], ['armor_plate', 1, 1], ['thruster', 1, 2]]); // kinetic (needs phys_2)
+
+function botDesignPool(empire: Empire): ShipDesign[] {
+  return empire.completedResearch.includes('phys_2') ? [...BOT_DESIGNS_BASE, BOT_DESIGN_KINETIC] : BOT_DESIGNS_BASE;
+}
 
 // What a bot turn produces — applied as a single empire write by processTick so
 // it never races the combat resolver.
@@ -109,6 +132,7 @@ export function runBotTurn(empire: Empire, game: GameMeta, tick: number, allEmpi
   let ships      = [...empire.ships];
   let fleets     = (empire.fleets ?? []).map(f => ({ ...f }));
   const orbitals = [...(empire.orbitalStructures ?? [])];
+  const groundOps = [...(empire.groundOps ?? [])];
   const pendingInv = [...(empire.pendingInvestigations ?? [])];
   const resolvedAnom = new Set(empire.resolvedAnomalies ?? []);
   let researchQueue = empire.researchQueue;
@@ -116,7 +140,7 @@ export function runBotTurn(empire: Empire, game: GameMeta, tick: number, allEmpi
 
   const touched = { surveyed: false, colonized: false, controlled: false, infra: false,
     stations: false, ships: false, fleets: false, research: false, resources: false,
-    orbitals: false, investigations: false };
+    orbitals: false, investigations: false, groundOps: false };
 
   // Threat detection: is any other empire's fleet sitting in our controlled space?
   const myControlled = new Set(controlled);
@@ -214,33 +238,67 @@ export function runBotTurn(empire: Empire, game: GameMeta, tick: number, allEmpi
     }
   }
 
-  // 5. Claim a surveyed, unclaimed system
-  const claim = claimableSystem({ ...empire, surveyedSystems: surveyed }, game);
-  if (claim && canAfford(r, STATION_CONFIG.space_station)) {
-    const cfg = STATION_CONFIG.space_station;
-    Object.assign(r, deductCosts(r, cfg)); touched.resources = true;
-    const sid = `stn_${tick}_${empire.id}_${stations.length}`;
-    stations.push({
-      id: sid, type: 'space_station', systemId: claim, level: 1, ownerId: empire.id,
-      buildStartedTick: tick, buildCompletedTick: tick + cfg.buildTicks, hp: cfg.hp, maxHp: cfg.hp,
-    });
-    touched.stations = true;
-    ssw.push({ path: `systemStates.${claim}.stationId`, value: sid });
+  // 4b. Exploit resource-rich worlds in our space with ground operations
+  if (rng.next() < 0.4) {
+    outerGo: for (const sysId of controlled) {
+      const sys = game.galaxy.systems.find(s => s.id === sysId);
+      if (!sys) continue;
+      const targets = [
+        ...sys.planets.filter(p => p.hasResources).map(p => p.id),
+        ...sys.planets.flatMap(p => p.moons.filter(m => m.hasResources).map(m => m.id)),
+      ];
+      for (const targetId of targets) {
+        if (groundOps.some(g => g.targetId === targetId)) continue;
+        const opType: GroundOpType =
+          (empire.resourceRates.research ?? 0) < 20 ? 'deep_scanner' : 'mineral_extractor';
+        const cfg = GROUND_OP_CONFIG[opType];
+        if (!canAfford(r, cfg)) break outerGo;
+        Object.assign(r, deductCosts(r, cfg)); touched.resources = true;
+        groundOps.push({
+          id: `gop_${tick}_${empire.id}_${groundOps.length}`,
+          type: opType, targetId, systemId: sysId,
+          buildStartedTick: tick, buildCompletedTick: tick + cfg.buildTicks, active: false,
+        });
+        touched.groundOps = true;
+        break outerGo;
+      }
+    }
   }
 
-  // 5b. Fortify: build a defense platform over a colonised world (esp. when threatened)
-  if ((homeThreatened || rng.next() < 0.2)) {
-    const cfg = ORBITAL_CONFIG.defense_platform;
+  // 5. Claim a surveyed, unclaimed system — resource systems get a mining station
+  const claim = claimableSystem({ ...empire, surveyedSystems: surveyed }, game);
+  if (claim) {
+    const claimSys = game.galaxy.systems.find(s => s.id === claim);
+    const hasResource = claimSys?.planets.some(p => p.hasResources) ?? false;
+    const stationType: StationType = hasResource ? 'mining_station' : 'space_station';
+    const cfg = STATION_CONFIG[stationType];
+    if (canAfford(r, cfg)) {
+      Object.assign(r, deductCosts(r, cfg)); touched.resources = true;
+      const sid = `stn_${tick}_${empire.id}_${stations.length}`;
+      stations.push({
+        id: sid, type: stationType, systemId: claim, level: 1, ownerId: empire.id,
+        buildStartedTick: tick, buildCompletedTick: tick + cfg.buildTicks, hp: cfg.hp, maxHp: cfg.hp,
+      });
+      touched.stations = true;
+      ssw.push({ path: `systemStates.${claim}.stationId`, value: sid });
+    }
+  }
+
+  // 5b. Orbital structures: defense platforms when threatened, else a sensor array
+  //     (extends vision) over a colonised world.
+  if (homeThreatened || rng.next() < 0.25) {
+    const orbType: import('@/types/game').OrbitalStructureType = homeThreatened ? 'defense_platform' : 'orbital_sensor';
+    const cfg = ORBITAL_CONFIG[orbType];
     if (canAfford(r, cfg)) {
       for (const sysId of controlled) {
         const sys = game.galaxy.systems.find(s => s.id === sysId);
         if (!sys) continue;
-        const planet = sys.planets.find(p => colonized.includes(p.id) && !orbitals.some(o => o.planetId === p.id && o.type === 'defense_platform'));
+        const planet = sys.planets.find(p => colonized.includes(p.id) && !orbitals.some(o => o.planetId === p.id && o.type === orbType));
         if (!planet) continue;
         Object.assign(r, deductCosts(r, cfg)); touched.resources = true;
         orbitals.push({
           id: `orb_${tick}_${empire.id}_${orbitals.length}`,
-          type: 'defense_platform', planetId: planet.id, systemId: sysId,
+          type: orbType, planetId: planet.id, systemId: sysId,
           buildStartedTick: tick, buildCompletedTick: tick + cfg.buildTicks,
           active: false, hp: cfg.hp, maxHp: cfg.hp,
         });
@@ -250,13 +308,16 @@ export function runBotTurn(empire: Empire, game: GameMeta, tick: number, allEmpi
     }
   }
 
-  // 6. Build a warship at a shipyard system
+  // 6. Build a warship at a shipyard system — rotate the design pool so fleets
+  //    field mixed damage/resist types (can't be hard-countered by one defense).
   const shipyardSys = infra.find(i => i.type === 'shipyard' && i.active)?.systemId
-    ?? infra.find(i => i.type === 'shipyard')?.systemId;
-  const design = empire.shipDesigns[0];
-  if (shipyardSys && design && ships.length < 8 && canAfford(r, design)) {
+    ?? infra.find(i => i.type === 'shipyard')?.systemId
+    ?? orbitals.find(o => o.type === 'orbital_shipyard' && o.active)?.systemId;
+  const pool = botDesignPool(empire);
+  const design = pool[ships.length % pool.length];
+  if (shipyardSys && design && ships.length < 10 && canAfford(r, design)) {
     Object.assign(r, deductCosts(r, design)); touched.resources = true;
-    ships.push(instantiateShip({ ...empire, ships }, design, shipyardSys, tick, ships.length + 1));
+    ships.push(instantiateShip(empire, design, shipyardSys, tick, ships.length + 1));
     touched.ships = true;
   }
 
@@ -317,6 +378,7 @@ export function runBotTurn(empire: Empire, game: GameMeta, tick: number, allEmpi
   if (touched.ships)      patch.ships = ships;
   if (touched.fleets)     patch.fleets = fleets;
   if (touched.orbitals)   patch.orbitalStructures = orbitals;
+  if (touched.groundOps)  patch.groundOps = groundOps;
   if (touched.investigations) patch.pendingInvestigations = pendingInv;
   if (touched.research)   { patch.researchQueue = researchQueue; patch.researchProgress = researchProgress; }
 
@@ -350,7 +412,7 @@ export function createBotEmpire(index: number, homeSystemId: string, _totalEmpir
     ships: [],
     fleets: [],
     orbitalStructures: [],
-    shipDesigns: [defaultBotShipDesign()],
+    shipDesigns: BOT_DESIGNS_BASE.map(d => ({ ...d })),
     completedResearch: [],
     researchQueue: null,
     researchProgress: 0,
@@ -361,21 +423,5 @@ export function createBotEmpire(index: number, homeSystemId: string, _totalEmpir
     isOnline: true,
     lastSeen: Date.now(),
     score: 0,
-  };
-}
-
-function defaultBotShipDesign(): ShipDesign {
-  return {
-    id: 'bot_default',
-    name: 'Marauder',
-    tiles: [
-      { type: 'cockpit',          x: 1, y: 0, hp: 40, maxHp: 40 },
-      { type: 'laser_cannon',     x: 0, y: 1, hp: 20, maxHp: 20 },
-      { type: 'shield_generator', x: 1, y: 1, hp: 30, maxHp: 30 },
-      { type: 'laser_cannon',     x: 2, y: 1, hp: 20, maxHp: 20 },
-      { type: 'thruster',         x: 1, y: 2, hp: 25, maxHp: 25 },
-    ],
-    attack: 24, defense: 20, speed: 8,
-    mineralCost: 150, energyCost: 25, creditCost: 70, buildTicks: 12,
   };
 }
